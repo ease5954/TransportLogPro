@@ -6,8 +6,8 @@ import android.content.ActivityNotFoundException;
 import android.content.ContentValues;
 import android.content.Intent;
 import android.content.pm.PackageManager;
-import android.graphics.Bitmap;
 import android.net.Uri;
+import android.os.Build;
 import android.os.Bundle;
 import android.os.Environment;
 import android.provider.MediaStore;
@@ -69,8 +69,7 @@ public class MainActivity extends Activity {
 
         webView.setWebViewClient(new WebViewClient() {
             @Override
-            public WebResourceResponse shouldInterceptRequest(
-                    WebView view, WebResourceRequest request) {
+            public WebResourceResponse shouldInterceptRequest(WebView view, WebResourceRequest request) {
                 return assetLoader.shouldInterceptRequest(request.getUrl());
             }
 
@@ -86,9 +85,7 @@ public class MainActivity extends Activity {
 
                 if ("http".equalsIgnoreCase(scheme) || "https".equalsIgnoreCase(scheme)) {
                     String host = uri.getHost();
-                    if ("appassets.androidplatform.net".equalsIgnoreCase(host)) {
-                        return false;
-                    }
+                    if ("appassets.androidplatform.net".equalsIgnoreCase(host)) return false;
                     startActivity(new Intent(Intent.ACTION_VIEW, uri));
                     return true;
                 }
@@ -113,8 +110,7 @@ public class MainActivity extends Activity {
                         return;
                     }
 
-                    if (ContextCompat.checkSelfPermission(
-                            MainActivity.this, Manifest.permission.CAMERA)
+                    if (ContextCompat.checkSelfPermission(MainActivity.this, Manifest.permission.CAMERA)
                             == PackageManager.PERMISSION_GRANTED) {
                         request.grant(new String[]{PermissionRequest.RESOURCE_VIDEO_CAPTURE});
                     } else {
@@ -145,18 +141,14 @@ public class MainActivity extends Activity {
 
                 Intent cameraIntent = new Intent(MediaStore.ACTION_IMAGE_CAPTURE);
                 try {
-                    File imageFile = File.createTempFile(
-                            "qr_", ".jpg", getCacheDir());
+                    File imageFile = File.createTempFile("qr_", ".jpg", getCacheDir());
                     cameraOutputUri = FileProvider.getUriForFile(
                             MainActivity.this,
                             getPackageName() + ".fileprovider",
                             imageFile
                     );
                     cameraIntent.putExtra(MediaStore.EXTRA_OUTPUT, cameraOutputUri);
-                    cameraIntent.addFlags(
-                            Intent.FLAG_GRANT_WRITE_URI_PERMISSION |
-                            Intent.FLAG_GRANT_READ_URI_PERMISSION
-                    );
+                    cameraIntent.addFlags(Intent.FLAG_GRANT_WRITE_URI_PERMISSION | Intent.FLAG_GRANT_READ_URI_PERMISSION);
                 } catch (Exception e) {
                     cameraIntent = null;
                 }
@@ -187,17 +179,11 @@ public class MainActivity extends Activity {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults);
 
         if (requestCode == CAMERA_PERMISSION_REQUEST && pendingWebPermission != null) {
-            if (grantResults.length > 0 &&
-                    grantResults[0] == PackageManager.PERMISSION_GRANTED) {
-                pendingWebPermission.grant(
-                        new String[]{PermissionRequest.RESOURCE_VIDEO_CAPTURE});
+            if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+                pendingWebPermission.grant(new String[]{PermissionRequest.RESOURCE_VIDEO_CAPTURE});
             } else {
                 pendingWebPermission.deny();
-                Toast.makeText(
-                        this,
-                        "QR 스캔을 사용하려면 카메라 권한을 허용해주세요.",
-                        Toast.LENGTH_LONG
-                ).show();
+                Toast.makeText(this, "QR 스캔을 사용하려면 카메라 권한을 허용해주세요.", Toast.LENGTH_LONG).show();
             }
             pendingWebPermission = null;
         }
@@ -207,13 +193,9 @@ public class MainActivity extends Activity {
     @SuppressWarnings("deprecation")
     protected void onActivityResult(int requestCode, int resultCode, Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
-
-        if (requestCode != FILE_CHOOSER_REQUEST || filePathCallback == null) {
-            return;
-        }
+        if (requestCode != FILE_CHOOSER_REQUEST || filePathCallback == null) return;
 
         Uri[] results = null;
-
         if (resultCode == RESULT_OK) {
             if (data != null && data.getData() != null) {
                 results = new Uri[]{data.getData()};
@@ -221,7 +203,6 @@ public class MainActivity extends Activity {
                 results = new Uri[]{cameraOutputUri};
             }
         }
-
         filePathCallback.onReceiveValue(results);
         filePathCallback = null;
         cameraOutputUri = null;
@@ -249,43 +230,44 @@ public class MainActivity extends Activity {
         @JavascriptInterface
         public void saveBase64File(String filename, String dataUrl) {
             try {
-                String safeName = filename == null || filename.trim().isEmpty()
-                        ? "운송일보.xlsx" : filename.trim();
-
+                String safeName = (filename == null || filename.trim().isEmpty()) ? "운송일보.xlsx" : filename.trim();
                 String base64 = dataUrl;
                 int comma = dataUrl.indexOf(',');
-                if (comma >= 0) {
-                    base64 = dataUrl.substring(comma + 1);
-                }
+                if (comma >= 0) base64 = dataUrl.substring(comma + 1);
                 byte[] bytes = Base64.decode(base64, Base64.DEFAULT);
 
-                ContentValues values = new ContentValues();
-                values.put(MediaStore.Downloads.DISPLAY_NAME, safeName);
-                values.put(
-                        MediaStore.Downloads.MIME_TYPE,
-                        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                );
-                values.put(
-                        MediaStore.Downloads.RELATIVE_PATH,
-                        Environment.DIRECTORY_DOWNLOADS + "/운송일보"
-                );
+                String savedLocation;
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                    ContentValues values = new ContentValues();
+                    values.put(MediaStore.Downloads.DISPLAY_NAME, safeName);
+                    values.put(MediaStore.Downloads.MIME_TYPE,
+                            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+                    values.put(MediaStore.Downloads.RELATIVE_PATH,
+                            Environment.DIRECTORY_DOWNLOADS + "/운송일보");
 
-                Uri uri = getContentResolver().insert(
-                        MediaStore.Downloads.EXTERNAL_CONTENT_URI, values);
-
-                if (uri == null) throw new IllegalStateException("Download insert failed");
-
-                try (OutputStream out = getContentResolver().openOutputStream(uri)) {
-                    if (out == null) throw new IllegalStateException("Output stream failed");
-                    out.write(bytes);
-                    out.flush();
+                    Uri uri = getContentResolver().insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values);
+                    if (uri == null) throw new IllegalStateException("Download insert failed");
+                    try (OutputStream out = getContentResolver().openOutputStream(uri)) {
+                        if (out == null) throw new IllegalStateException("Output stream failed");
+                        out.write(bytes);
+                        out.flush();
+                    }
+                    savedLocation = "다운로드/운송일보/" + safeName;
+                } else {
+                    File root = getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS);
+                    if (root == null) root = getFilesDir();
+                    File dir = new File(root, "운송일보");
+                    if (!dir.exists() && !dir.mkdirs()) throw new IllegalStateException("폴더 생성 실패");
+                    File target = new File(dir, safeName);
+                    try (FileOutputStream out = new FileOutputStream(target)) {
+                        out.write(bytes);
+                        out.flush();
+                    }
+                    savedLocation = target.getAbsolutePath();
                 }
 
-                runOnUiThread(() -> Toast.makeText(
-                        MainActivity.this,
-                        "Excel 저장 완료: 다운로드/운송일보/" + safeName,
-                        Toast.LENGTH_LONG
-                ).show());
+                final String message = "Excel 저장 완료: " + savedLocation;
+                runOnUiThread(() -> Toast.makeText(MainActivity.this, message, Toast.LENGTH_LONG).show());
 
             } catch (Exception e) {
                 runOnUiThread(() -> Toast.makeText(
