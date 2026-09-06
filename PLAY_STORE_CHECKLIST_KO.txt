@@ -1,0 +1,33 @@
+운송일보 PRO - Google Play 출시 체크리스트
+
+[빌드]
+□ applicationId 최종 확정
+□ versionCode / versionName 확인
+□ targetSdk 36
+□ release AAB 생성
+□ 앱 서명/keystore 백업
+
+[기능 테스트]
+□ 신규 거래처 등록
+□ 빠른운송등록
+□ QR 실시간 스캔
+□ QR 사진 스캔
+□ 새 하차지 입력/저장
+□ 운송내역 건수/중량/운임
+□ 월별 조회
+□ 사고접수 콜센터 화면
+□ 전화 연결
+□ Excel 생성
+□ 다운로드/운송일보 폴더 저장
+□ 백업/복원
+□ 앱 재실행 후 데이터 유지
+
+[Play Console]
+□ 앱 아이콘 512x512
+□ 휴대폰 스크린샷
+□ 앱 설명
+□ 개인정보처리방침 URL
+□ Data safety 작성
+□ 콘텐츠 등급
+□ 테스트 트랙
+□ 프로덕션 액세스

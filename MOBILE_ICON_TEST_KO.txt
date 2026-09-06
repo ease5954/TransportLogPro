@@ -1,0 +1,28 @@
+운송일보 PRO Android V2 - 모바일 아이콘 직접 실행 테스트
+
+목표:
+APK를 휴대폰에 설치하면 '운송일보 PRO' 아이콘이 앱 목록에 자동 생성됩니다.
+그 아이콘을 누르면 MainActivity가 바로 실행되고 운송일보 홈 화면이 열립니다.
+
+AndroidManifest 설정:
+- MAIN
+- LAUNCHER
+- exported=true
+이 세 가지가 적용되어 있습니다.
+
+방법 A - Android Studio
+1. 프로젝트 열기
+2. 휴대폰 USB 연결
+3. Run ▶
+4. 휴대폰에 운송일보 PRO 설치
+5. 앱 목록의 운송일보 PRO 아이콘 클릭
+6. 앱 직접 실행 테스트
+
+방법 B - GitHub Actions
+1. 이 프로젝트를 GitHub 저장소에 업로드
+2. Actions → Build Android APK and AAB 실행
+3. TransportLogPro-debug-apk artifact 다운로드
+4. APK를 Android 휴대폰으로 보내 설치
+5. 운송일보 PRO 아이콘을 눌러 테스트
+
+V2에는 adaptive launcher icon과 Android 시작 화면도 추가되어 있습니다.
