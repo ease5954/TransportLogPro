@@ -200,6 +200,7 @@ public class MainActivity extends Activity {
         runOnUiThread(() -> {
             try {
                 IntentIntegrator integrator = new IntentIntegrator(MainActivity.this);
+                integrator.setCaptureActivity(CustomQrCaptureActivity.class);
                 integrator.setDesiredBarcodeFormats(Collections.singletonList("QR_CODE"));
                 integrator.setPrompt("QR 코드를 사각형 안에 맞춰주세요");
                 integrator.setCameraId(0);
