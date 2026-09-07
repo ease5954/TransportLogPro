@@ -1,0 +1,78 @@
+/* Header-only fix: keep compact body/bottom layout unchanged */
+.header{
+  display:grid!important;
+  grid-template-columns:40px minmax(0,1fr)!important;
+  align-items:center!important;
+  column-gap:11px!important;
+  height:56px!important;
+  min-height:56px!important;
+  padding:0 12px!important;
+}
+.header>.hamb{
+  position:static!important;
+  grid-column:1!important;
+  width:40px!important;
+  min-width:40px!important;
+  max-width:40px!important;
+  height:40px!important;
+  margin:0!important;
+  padding:0!important;
+  justify-self:start!important;
+  flex:none!important;
+}
+.header>div{
+  grid-column:2!important;
+  min-width:0!important;
+  width:100%!important;
+  overflow:hidden!important;
+  padding-left:1px!important;
+}
+.headtitle{
+  display:block!important;
+  width:100%!important;
+  margin:0!important;
+  padding:0!important;
+  white-space:nowrap!important;
+  overflow:hidden!important;
+  text-overflow:ellipsis!important;
+  line-height:1.15!important;
+}
+.sub{
+  display:block!important;
+  width:100%!important;
+  white-space:nowrap!important;
+  overflow:hidden!important;
+  text-overflow:ellipsis!important;
+}
+@media(max-width:390px){
+  .header{
+    grid-template-columns:38px minmax(0,1fr)!important;
+    column-gap:10px!important;
+    height:54px!important;
+    min-height:54px!important;
+    padding:0 10px!important;
+  }
+  .header>.hamb{
+    width:38px!important;
+    min-width:38px!important;
+    max-width:38px!important;
+    height:38px!important;
+    font-size:21px!important;
+  }
+  .headtitle{font-size:15px!important;}
+  .sub{font-size:10px!important;}
+}
+@media(max-width:350px){
+  .header{
+    grid-template-columns:36px minmax(0,1fr)!important;
+    column-gap:9px!important;
+    padding:0 8px!important;
+  }
+  .header>.hamb{
+    width:36px!important;
+    min-width:36px!important;
+    max-width:36px!important;
+    height:36px!important;
+  }
+  .headtitle{font-size:14px!important;}
+}
