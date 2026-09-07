@@ -81,6 +81,18 @@ public class MainActivity extends Activity {
             }
 
             @Override
+            public void onPageFinished(WebView view, String url) {
+                super.onPageFinished(view, url);
+                view.evaluateJavascript(
+                        "window.startQR=function(){"
+                                + "if(window.AndroidBridge&&AndroidBridge.startNativeQrScan){AndroidBridge.startNativeQrScan();}"
+                                + "else if(window.__legacyStartQR){window.__legacyStartQR();}"
+                                + "};",
+                        null
+                );
+            }
+
+            @Override
             public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
                 Uri uri = request.getUrl();
                 String scheme = uri.getScheme();
