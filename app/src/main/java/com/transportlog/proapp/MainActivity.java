@@ -30,10 +30,8 @@ import androidx.core.content.ContextCompat;
 import androidx.core.content.FileProvider;
 import androidx.webkit.WebViewAssetLoader;
 
-import com.google.mlkit.vision.barcode.common.Barcode;
-import com.google.mlkit.vision.codescanner.GmsBarcodeScanner;
-import com.google.mlkit.vision.codescanner.GmsBarcodeScannerOptions;
-import com.google.mlkit.vision.codescanner.GmsBarcodeScanning;
+import com.google.zxing.integration.android.IntentIntegrator;
+import com.google.zxing.integration.android.IntentResult;
 
 import org.json.JSONObject;
 
@@ -84,10 +82,15 @@ public class MainActivity extends Activity {
             public void onPageFinished(WebView view, String url) {
                 super.onPageFinished(view, url);
                 view.evaluateJavascript(
-                        "window.startQR=function(){"
-                                + "if(window.AndroidBridge&&AndroidBridge.startNativeQrScan){AndroidBridge.startNativeQrScan();}"
-                                + "else if(window.__legacyStartQR){window.__legacyStartQR();}"
-                                + "};",
+                        "(function(){"
+                                + "if(!window.__legacyStartQR&&window.startQR){window.__legacyStartQR=window.startQR;}"
+                                + "window.startQR=function(){"
+                                + "try{"
+                                + "if(window.AndroidBridge&&AndroidBridge.startNativeQrScan){AndroidBridge.startNativeQrScan();return;}"
+                                + "}catch(e){}"
+                                + "if(window.__legacyStartQR){window.__legacyStartQR();}"
+                                + "};"
+                                + "})();",
                         null
                 );
             }
@@ -191,26 +194,35 @@ public class MainActivity extends Activity {
     }
 
     private void startNativeQrScanner() {
-        GmsBarcodeScannerOptions options = new GmsBarcodeScannerOptions.Builder()
-                .setBarcodeFormats(Barcode.FORMAT_QR_CODE)
-                .enableAutoZoom()
-                .build();
+        runOnUiThread(() -> {
+            try {
+                IntentIntegrator integrator = new IntentIntegrator(MainActivity.this);
+                integrator.setDesiredBarcodeFormats(IntentIntegrator.QR_CODE_TYPES);
+                integrator.setPrompt("QR 코드를 사각형 안에 맞춰주세요");
+                integrator.setCameraId(0);
+                integrator.setBeepEnabled(true);
+                integrator.setBarcodeImageEnabled(false);
+                integrator.setOrientationLocked(true);
+                Toast.makeText(MainActivity.this, "QR 스캐너를 시작합니다.", Toast.LENGTH_SHORT).show();
+                integrator.initiateScan();
+            } catch (Exception e) {
+                Toast.makeText(
+                        MainActivity.this,
+                        "QR 스캐너 시작 실패: " + e.getMessage(),
+                        Toast.LENGTH_LONG
+                ).show();
+            }
+        });
+    }
 
-        GmsBarcodeScanner scanner = GmsBarcodeScanning.getClient(this, options);
-        scanner.startScan()
-                .addOnSuccessListener(barcode -> {
-                    String rawValue = barcode.getRawValue();
-                    if (rawValue == null || rawValue.trim().isEmpty()) {
-                        Toast.makeText(this, "QR 내용을 읽지 못했습니다. 다시 시도해주세요.", Toast.LENGTH_SHORT).show();
-                        return;
-                    }
-                    String js = "applyQR(" + JSONObject.quote(rawValue) + ")";
-                    webView.evaluateJavascript(js, null);
-                })
-                .addOnCanceledListener(() ->
-                        Toast.makeText(this, "QR 스캔을 취소했습니다.", Toast.LENGTH_SHORT).show())
-                .addOnFailureListener(e ->
-                        Toast.makeText(this, "QR 스캔 실패: " + e.getMessage(), Toast.LENGTH_LONG).show());
+    private void deliverQrResultToWeb(String rawValue) {
+        if (rawValue == null || rawValue.trim().isEmpty()) {
+            Toast.makeText(this, "QR 내용을 읽지 못했습니다. 다시 시도해주세요.", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        String js = "applyQR(" + JSONObject.quote(rawValue) + ")";
+        webView.evaluateJavascript(js, value ->
+                Toast.makeText(MainActivity.this, "QR 인식 완료", Toast.LENGTH_SHORT).show());
     }
 
     @Override
@@ -225,7 +237,7 @@ public class MainActivity extends Activity {
                 pendingWebPermission.grant(new String[]{PermissionRequest.RESOURCE_VIDEO_CAPTURE});
             } else {
                 pendingWebPermission.deny();
-                Toast.makeText(this, "QR 스캔을 사용하려면 카메라 권한을 허용해주세요.", Toast.LENGTH_LONG).show();
+                Toast.makeText(this, "카메라 권한을 허용해주세요.", Toast.LENGTH_LONG).show();
             }
             pendingWebPermission = null;
         }
@@ -234,6 +246,16 @@ public class MainActivity extends Activity {
     @Override
     @SuppressWarnings("deprecation")
     protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+        IntentResult qrResult = IntentIntegrator.parseActivityResult(requestCode, resultCode, data);
+        if (qrResult != null) {
+            if (qrResult.getContents() != null) {
+                deliverQrResultToWeb(qrResult.getContents());
+            } else {
+                Toast.makeText(this, "QR 스캔을 취소했습니다.", Toast.LENGTH_SHORT).show();
+            }
+            return;
+        }
+
         super.onActivityResult(requestCode, resultCode, data);
         if (requestCode != FILE_CHOOSER_REQUEST || filePathCallback == null) return;
 
@@ -271,7 +293,7 @@ public class MainActivity extends Activity {
     public class AndroidBridge {
         @JavascriptInterface
         public void startNativeQrScan() {
-            runOnUiThread(MainActivity.this::startNativeQrScanner);
+            startNativeQrScanner();
         }
 
         @JavascriptInterface
