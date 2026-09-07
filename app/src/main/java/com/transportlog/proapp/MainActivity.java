@@ -64,6 +64,8 @@ public class MainActivity extends Activity {
         settings.setMediaPlaybackRequiresUserGesture(false);
         settings.setAllowFileAccess(false);
         settings.setAllowContentAccess(true);
+        settings.setCacheMode(WebSettings.LOAD_NO_CACHE);
+        webView.clearCache(true);
 
         webView.addJavascriptInterface(new AndroidBridge(), "AndroidBridge");
 
