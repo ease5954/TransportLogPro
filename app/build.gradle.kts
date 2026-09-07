@@ -10,8 +10,8 @@ android {
         applicationId = "com.transportlog.proapp"
         minSdk = 24
         targetSdk = 36
-        versionCode = 4
-        versionName = "1.3.0"
+        versionCode = 5
+        versionName = "1.4.0"
     }
 
     buildTypes {
@@ -33,5 +33,6 @@ android {
 dependencies {
     implementation("androidx.webkit:webkit:1.14.0")
     implementation("androidx.core:core:1.17.0")
-    implementation("com.google.android.gms:play-services-code-scanner:16.1.0")
+    implementation("com.journeyapps:zxing-android-embedded:4.3.0")
+    implementation("com.google.zxing:core:3.5.3")
 }
