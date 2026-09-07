@@ -30,6 +30,13 @@ import androidx.core.content.ContextCompat;
 import androidx.core.content.FileProvider;
 import androidx.webkit.WebViewAssetLoader;
 
+import com.google.mlkit.vision.barcode.common.Barcode;
+import com.google.mlkit.vision.codescanner.GmsBarcodeScanner;
+import com.google.mlkit.vision.codescanner.GmsBarcodeScannerOptions;
+import com.google.mlkit.vision.codescanner.GmsBarcodeScanning;
+
+import org.json.JSONObject;
+
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.OutputStream;
@@ -171,6 +178,29 @@ public class MainActivity extends Activity {
         webView.loadUrl("https://appassets.androidplatform.net/assets/index.html");
     }
 
+    private void startNativeQrScanner() {
+        GmsBarcodeScannerOptions options = new GmsBarcodeScannerOptions.Builder()
+                .setBarcodeFormats(Barcode.FORMAT_QR_CODE)
+                .enableAutoZoom()
+                .build();
+
+        GmsBarcodeScanner scanner = GmsBarcodeScanning.getClient(this, options);
+        scanner.startScan()
+                .addOnSuccessListener(barcode -> {
+                    String rawValue = barcode.getRawValue();
+                    if (rawValue == null || rawValue.trim().isEmpty()) {
+                        Toast.makeText(this, "QR 내용을 읽지 못했습니다. 다시 시도해주세요.", Toast.LENGTH_SHORT).show();
+                        return;
+                    }
+                    String js = "applyQR(" + JSONObject.quote(rawValue) + ")";
+                    webView.evaluateJavascript(js, null);
+                })
+                .addOnCanceledListener(() ->
+                        Toast.makeText(this, "QR 스캔을 취소했습니다.", Toast.LENGTH_SHORT).show())
+                .addOnFailureListener(e ->
+                        Toast.makeText(this, "QR 스캔 실패: " + e.getMessage(), Toast.LENGTH_LONG).show());
+    }
+
     @Override
     public void onRequestPermissionsResult(
             int requestCode,
@@ -227,6 +257,11 @@ public class MainActivity extends Activity {
     }
 
     public class AndroidBridge {
+        @JavascriptInterface
+        public void startNativeQrScan() {
+            runOnUiThread(MainActivity.this::startNativeQrScanner);
+        }
+
         @JavascriptInterface
         public void saveBase64File(String filename, String dataUrl) {
             try {
