@@ -38,6 +38,7 @@ import org.json.JSONObject;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.OutputStream;
+import java.util.Collections;
 
 public class MainActivity extends Activity {
 
@@ -197,7 +198,7 @@ public class MainActivity extends Activity {
         runOnUiThread(() -> {
             try {
                 IntentIntegrator integrator = new IntentIntegrator(MainActivity.this);
-                integrator.setDesiredBarcodeFormats(IntentIntegrator.QR_CODE_TYPES);
+                integrator.setDesiredBarcodeFormats(Collections.singletonList("QR_CODE"));
                 integrator.setPrompt("QR 코드를 사각형 안에 맞춰주세요");
                 integrator.setCameraId(0);
                 integrator.setBeepEnabled(true);
