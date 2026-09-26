@@ -7,6 +7,9 @@ import android.content.ContentValues;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.graphics.Color;
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
+import android.graphics.Matrix;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
@@ -35,6 +38,13 @@ import androidx.core.view.ViewCompat;
 import androidx.core.view.WindowInsetsCompat;
 import androidx.webkit.WebViewAssetLoader;
 
+import com.google.zxing.BinaryBitmap;
+import com.google.zxing.DecodeHintType;
+import com.google.zxing.MultiFormatReader;
+import com.google.zxing.RGBLuminanceSource;
+import com.google.zxing.ReaderException;
+import com.google.zxing.Result;
+import com.google.zxing.common.HybridBinarizer;
 import com.google.zxing.integration.android.IntentIntegrator;
 import com.google.zxing.integration.android.IntentResult;
 
@@ -42,19 +52,24 @@ import org.json.JSONObject;
 
 import java.io.File;
 import java.io.FileOutputStream;
+import java.io.InputStream;
 import java.io.OutputStream;
 import java.util.Collections;
+import java.util.EnumMap;
+import java.util.Map;
 
 public class MainActivity extends Activity {
 
     private static final int CAMERA_PERMISSION_REQUEST = 501;
     private static final int NATIVE_QR_CAMERA_PERMISSION_REQUEST = 503;
+    private static final int NATIVE_QR_PHOTO_REQUEST = 504;
     private static final int FILE_CHOOSER_REQUEST = 502;
 
     private WebView webView;
     private PermissionRequest pendingWebPermission;
     private ValueCallback<Uri[]> filePathCallback;
     private Uri cameraOutputUri;
+    private Uri nativeQrCameraOutputUri;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -108,23 +123,6 @@ public class MainActivity extends Activity {
             @Override
             public WebResourceResponse shouldInterceptRequest(WebView view, WebResourceRequest request) {
                 return assetLoader.shouldInterceptRequest(request.getUrl());
-            }
-
-            @Override
-            public void onPageFinished(WebView view, String url) {
-                super.onPageFinished(view, url);
-                view.evaluateJavascript(
-                        "(function(){"
-                                + "if(!window.__legacyStartQR&&window.startQR){window.__legacyStartQR=window.startQR;}"
-                                + "window.startQR=function(){"
-                                + "try{"
-                                + "if(window.AndroidBridge&&AndroidBridge.startNativeQrScan){AndroidBridge.startNativeQrScan();return;}"
-                                + "}catch(e){}"
-                                + "if(window.__legacyStartQR){window.__legacyStartQR();}"
-                                + "};"
-                                + "})();",
-                        null
-                );
             }
 
             @Override
@@ -244,7 +242,8 @@ public class MainActivity extends Activity {
     private void launchNativeQrScanner() {
         try {
             IntentIntegrator integrator = new IntentIntegrator(MainActivity.this);
-            integrator.setCaptureActivity(CustomQrCaptureActivity.class);
+            // Use the library default CaptureActivity: this is the scanner
+            // that worked before the custom square overlay was added.
             integrator.setDesiredBarcodeFormats(Collections.singletonList("QR_CODE"));
             integrator.setPrompt("QR 코드를 사각형 안에 맞춰주세요");
             integrator.setCameraId(0);
@@ -263,12 +262,131 @@ public class MainActivity extends Activity {
 
     private void deliverQrResultToWeb(String rawValue) {
         if (rawValue == null || rawValue.trim().isEmpty()) {
-            Toast.makeText(this, "QR 내용을 읽지 못했습니다. 다시 시도해주세요.", Toast.LENGTH_SHORT).show();
+            Toast.makeText(this, "QR 내용을 읽지 못했습니다. 다시 시도해주세요.", Toast.LENGTH_LONG).show();
             return;
         }
-        String js = "applyQR(" + JSONObject.quote(rawValue) + ")";
-        webView.evaluateJavascript(js, value ->
-                Toast.makeText(MainActivity.this, "QR 인식 완료", Toast.LENGTH_SHORT).show());
+        // applyQR() returns true only if the payload contains supported freight
+        // fields. Do not claim auto-fill succeeded for ordinary URLs or other QR text.
+        String js = "(typeof applyQR==='function' ? applyQR(" + JSONObject.quote(rawValue)
+                + ") : 'parser_missing')";
+        webView.evaluateJavascript(js, value -> {
+            if ("true".equals(value)) {
+                Toast.makeText(MainActivity.this, "QR 인식 및 운송정보 전달 완료", Toast.LENGTH_SHORT).show();
+            } else if ("\"parser_missing\"".equals(value)) {
+                Toast.makeText(MainActivity.this, "QR은 읽었지만 운송정보 화면이 준비되지 않았습니다.", Toast.LENGTH_LONG).show();
+            }
+            // For false, the QR page itself shows the decoded text and explanation.
+        });
+    }
+
+    private void startNativeQrPhotoScan() {
+        runOnUiThread(() -> {
+            try {
+                Intent gallery = new Intent(Intent.ACTION_GET_CONTENT);
+                gallery.addCategory(Intent.CATEGORY_OPENABLE);
+                gallery.setType("image/*");
+
+                Intent chooser = Intent.createChooser(gallery, "QR 사진 촬영 또는 선택");
+                nativeQrCameraOutputUri = null;
+                if (ContextCompat.checkSelfPermission(MainActivity.this, Manifest.permission.CAMERA)
+                        == PackageManager.PERMISSION_GRANTED) {
+                    try {
+                        File image = File.createTempFile("native_qr_", ".jpg", getCacheDir());
+                        nativeQrCameraOutputUri = FileProvider.getUriForFile(
+                                MainActivity.this,
+                                getPackageName() + ".fileprovider",
+                                image
+                        );
+                        Intent camera = new Intent(MediaStore.ACTION_IMAGE_CAPTURE);
+                        camera.putExtra(MediaStore.EXTRA_OUTPUT, nativeQrCameraOutputUri);
+                        camera.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_WRITE_URI_PERMISSION);
+                        chooser.putExtra(Intent.EXTRA_INITIAL_INTENTS, new Intent[]{camera});
+                    } catch (Exception ignored) {
+                        nativeQrCameraOutputUri = null;
+                    }
+                }
+                startActivityForResult(chooser, NATIVE_QR_PHOTO_REQUEST);
+            } catch (Exception e) {
+                Toast.makeText(MainActivity.this, "QR 사진 선택 실패: " + e.getMessage(), Toast.LENGTH_LONG).show();
+            }
+        });
+    }
+
+    private void decodeNativeQrPhoto(Uri uri) {
+        // Read and decode locally with the ZXing library already bundled in the APK.
+        // This works without relying on a remote JavaScript CDN.
+        new Thread(() -> {
+            String result = null;
+            String failure = null;
+            try {
+                BitmapFactory.Options bounds = new BitmapFactory.Options();
+                bounds.inJustDecodeBounds = true;
+                try (InputStream stream = getContentResolver().openInputStream(uri)) {
+                    if (stream == null) throw new IllegalStateException("사진 파일을 열 수 없습니다.");
+                    BitmapFactory.decodeStream(stream, null, bounds);
+                }
+                if (bounds.outWidth <= 0 || bounds.outHeight <= 0) {
+                    throw new IllegalStateException("사진 형식을 읽지 못했습니다.");
+                }
+                int sampleSize = 1;
+                while (Math.max(bounds.outWidth / sampleSize, bounds.outHeight / sampleSize) > 2048) {
+                    sampleSize *= 2;
+                }
+                BitmapFactory.Options options = new BitmapFactory.Options();
+                options.inSampleSize = sampleSize;
+                options.inPreferredConfig = Bitmap.Config.ARGB_8888;
+                Bitmap bitmap;
+                try (InputStream stream = getContentResolver().openInputStream(uri)) {
+                    if (stream == null) throw new IllegalStateException("사진 파일을 열 수 없습니다.");
+                    bitmap = BitmapFactory.decodeStream(stream, null, options);
+                }
+                if (bitmap == null) throw new IllegalStateException("사진을 불러오지 못했습니다.");
+                Map<DecodeHintType, Object> hints = new EnumMap<>(DecodeHintType.class);
+                hints.put(DecodeHintType.POSSIBLE_FORMATS, Collections.singletonList(com.google.zxing.BarcodeFormat.QR_CODE));
+                hints.put(DecodeHintType.TRY_HARDER, Boolean.TRUE);
+                for (int degrees : new int[]{0, 90, 180, 270}) {
+                    Bitmap rotated = bitmap;
+                    if (degrees != 0) {
+                        Matrix matrix = new Matrix();
+                        matrix.postRotate(degrees);
+                        rotated = Bitmap.createBitmap(bitmap, 0, 0, bitmap.getWidth(), bitmap.getHeight(), matrix, true);
+                    }
+                    try {
+                        int width = rotated.getWidth();
+                        int height = rotated.getHeight();
+                        int[] pixels = new int[width * height];
+                        rotated.getPixels(pixels, 0, width, 0, 0, width, height);
+                        BinaryBitmap binary = new BinaryBitmap(new HybridBinarizer(
+                                new RGBLuminanceSource(width, height, pixels)
+                        ));
+                        MultiFormatReader reader = new MultiFormatReader();
+                        reader.setHints(hints);
+                        Result decoded = reader.decodeWithState(binary);
+                        if (decoded != null && decoded.getText() != null && !decoded.getText().isEmpty()) {
+                            result = decoded.getText();
+                            break;
+                        }
+                    } catch (ReaderException ignored) {
+                        // Some photos carry rotation metadata; try all orientations.
+                    } finally {
+                        if (rotated != bitmap) rotated.recycle();
+                    }
+                }
+                bitmap.recycle();
+                if (result == null) failure = "이 사진에서 QR 코드를 찾지 못했습니다. 더 가까이 촬영해 주세요.";
+            } catch (Exception e) {
+                failure = "QR 사진 인식 실패: " + e.getMessage();
+            }
+            final String decodedText = result;
+            final String errorMessage = failure;
+            runOnUiThread(() -> {
+                if (decodedText != null) {
+                    deliverQrResultToWeb(decodedText);
+                } else {
+                    Toast.makeText(MainActivity.this, errorMessage, Toast.LENGTH_LONG).show();
+                }
+            });
+        }).start();
     }
 
     @Override
@@ -316,6 +434,19 @@ public class MainActivity extends Activity {
         }
 
         super.onActivityResult(requestCode, resultCode, data);
+        if (requestCode == NATIVE_QR_PHOTO_REQUEST) {
+            Uri selectedPhoto = null;
+            if (resultCode == RESULT_OK) {
+                if (data != null && data.getData() != null) {
+                    selectedPhoto = data.getData();
+                } else {
+                    selectedPhoto = nativeQrCameraOutputUri;
+                }
+            }
+            nativeQrCameraOutputUri = null;
+            if (selectedPhoto != null) decodeNativeQrPhoto(selectedPhoto);
+            return;
+        }
         if (requestCode != FILE_CHOOSER_REQUEST || filePathCallback == null) return;
 
         Uri[] results = null;
@@ -353,6 +484,11 @@ public class MainActivity extends Activity {
         @JavascriptInterface
         public void startNativeQrScan() {
             startNativeQrScanner();
+        }
+
+        @JavascriptInterface
+        public void startNativeQrPhotoScan() {
+            MainActivity.this.startNativeQrPhotoScan();
         }
 
         @JavascriptInterface

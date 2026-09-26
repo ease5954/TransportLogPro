@@ -40,8 +40,70 @@ function closeInsurance(){$('insurance').classList.remove('show')}
 function showAppInfo(fromDrawer){if(fromDrawer)$('drawer').classList.remove('show');$('appInfo').classList.add('show');$('appInfo').scrollTop=0}
 function closeAppInfo(){$('appInfo').classList.remove('show')}
 function startQR(){if(window.AndroidBridge&&typeof window.AndroidBridge.startNativeQrScan==='function'){try{window.AndroidBridge.startNativeQrScan();return}catch(e){toast('QR 카메라 실행에 실패했습니다');return}}if(!window.Html5Qrcode){toast('QR 모듈을 불러오지 못했습니다');return}if(qrScanner&&qrScanner.isScanning)return;qrScanner=new Html5Qrcode('qr-reader');qrScanner.start({facingMode:'environment'},{fps:10,qrbox:{width:230,height:230}},text=>{qrScanner.stop().catch(()=>{});applyQR(text)},()=>{}).catch(e=>toast('카메라 권한을 허용해주세요'))}
+function startQRPhoto(){if(window.AndroidBridge&&typeof window.AndroidBridge.startNativeQrPhotoScan==='function'){try{window.AndroidBridge.startNativeQrPhotoScan();return}catch(e){toast('QR 사진 선택을 열지 못했습니다');return}}const input=$('qrPhoto');if(input)input.click()}
 async function scanPhoto(e){const f=e.target.files&&e.target.files[0];if(!f)return;try{const q=new Html5Qrcode('qr-reader'),text=await q.scanFile(f,true);applyQR(text)}catch(err){toast('QR을 인식하지 못했습니다')}finally{e.target.value=''}}
-function applyQR(text){let d={};try{d=JSON.parse(text)}catch(e){String(text).split(/[;,\n|]+/).forEach(p=>{const m=p.match(/^([^:=]+)[:=](.+)$/);if(m)d[m[1].trim()]=m[2].trim()})}const n=d['거래처']||d['거래처명']||d.client||d.customer||'';if(n){let c=clients.find(x=>x.name===n);if(!c){c={id:Date.now(),name:n,loading:d['상차지']||n,transport:d['운송사']||'',rates:[]};clients.push(c);save('clients',clients)}fillClients();$('regClient').value=c.id;applyClient()}go('register');setTimeout(()=>{if(d['상차지'])$('regLoading').value=d['상차지'];if(d['하차지'])$('regUnloading').value=d['하차지'];if(d['양회사'])$('regAggregate').value=d['양회사'];if(d['운송사'])$('regTransport').value=d['운송사'];if(d['차량번호'])$('regVehicle').value=d['차량번호'];const item=d['품목']||d['물품']||d.item||'';const price=Number(String(d['단가']||d.price||0).replace(/,/g,''))||0;if(item){window.regItem=item;$('regPrice').value=price}const w=Number(String(d['중량']||d.weight||0).replace(/[^\d.]/g,''))||0;if(w)$('regWeight').value=w;calcFreight();toast('✓ QR 정보 자동 입력 완료')},100)}
+function applyQR(text){
+  const raw=String(text??'').trim();
+  let d={};
+  try{
+    const parsed=JSON.parse(raw);
+    if(parsed&&typeof parsed==='object'&&!Array.isArray(parsed)){
+      d=parsed;
+      if(d.data&&typeof d.data==='object'&&!Array.isArray(d.data))d={...d,...d.data};
+    }
+  }catch(e){
+    raw.split(/[;,\n|]+/).forEach(p=>{
+      const m=p.match(/^([^:=]+)[:=](.+)$/);
+      if(m)d[m[1].trim()]=m[2].trim();
+    });
+  }
+  const n=d['거래처']||d['거래처명']||d.client||d.customer||'';
+  const item=d['품목']||d['물품']||d.item||'';
+  const loading=d['상차지']||d.loading||'';
+  const unloading=d['하차지']||d.unloading||'';
+  const aggregate=d['양회사']||d.aggregate||'';
+  const transport=d['운송사']||d.transport||'';
+  const vehicle=d['차량번호']||d.vehicle||'';
+  const weight=d['중량']||d.weight||'';
+  const price=d['단가']||d.price||'';
+  const hasTransportFields=Boolean(n||item||loading||unloading||aggregate||transport||vehicle||weight||price);
+  const resultBox=$('qrResult');
+  if(!hasTransportFields){
+    if(resultBox){
+      resultBox.style.display='block';
+      resultBox.textContent='QR 판독은 성공했습니다. 다만 운송정보 형식이 달라 자동 입력하지 못했습니다.\n읽힌 내용: '+raw.slice(0,1200);
+    }
+    toast('QR은 읽었지만 운송정보 형식이 다릅니다');
+    return false;
+  }
+  if(resultBox){resultBox.style.display='none';resultBox.textContent='';}
+  if(n){
+    let c=clients.find(x=>x.name===String(n));
+    if(!c){
+      c={id:Date.now(),name:String(n),loading:String(loading||n),transport:String(transport),rates:[]};
+      clients.push(c);
+      save('clients',clients);
+    }
+    fillClients();
+    $('regClient').value=c.id;
+    applyClient();
+  }
+  go('register');
+  setTimeout(()=>{
+    if(loading)$('regLoading').value=loading;
+    if(unloading)$('regUnloading').value=unloading;
+    if(aggregate)$('regAggregate').value=aggregate;
+    if(transport)$('regTransport').value=transport;
+    if(vehicle)$('regVehicle').value=vehicle;
+    if(item){window.regItem=item;$('regPrice').value=Number(String(price||0).replace(/,/g,''))||0;}
+    else if(price)$('regPrice').value=Number(String(price).replace(/,/g,''))||0;
+    const w=Number(String(weight||0).replace(/[^\d.]/g,''))||0;
+    if(w)$('regWeight').value=w;
+    calcFreight();
+    toast('✓ QR 정보 자동 입력 완료');
+  },100);
+  return true;
+}
 function toSheetRows(a){return a.map(x=>({'날짜':x.date,'거래처':x.client,'물품':x.item,'중량(톤)':Number(x.weight||0),'단가(원/톤)':Number(x.price||0),'운임(원)':Number(x.freight||0),'상차지':x.loading,'하차지':x.unloading,'양회사':x.aggregate,'운송사':x.transport,'차량번호':x.vehicle}))}
 function saveWorkbook(wb,name){if(!window.XLSX){toast('Excel 모듈을 불러오지 못했습니다');return}const b64=XLSX.write(wb,{bookType:'xlsx',type:'base64'}),data='data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64,'+b64;if(window.AndroidBridge&&AndroidBridge.saveBase64File){AndroidBridge.saveBase64File(name,data);return}const a=document.createElement('a');a.href=data;a.download=name;a.click()}
 function exportTransportExcel(){const m=$('excelMonth').value||currentMonth(),a=logs.filter(x=>monthKey(x.date)===m);if(!a.length){toast(m+' 운송내역이 없습니다');return}const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(toSheetRows(a)),'운송내역');saveWorkbook(wb,'운송일보_'+m+'.xlsx')}

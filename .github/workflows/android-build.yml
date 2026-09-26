@@ -44,7 +44,7 @@ jobs:
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: TransportLogPro-QR-debug-apk
+          name: TransportLogPro-QR-FIX-debug-apk
           path: app/build/outputs/apk/debug/app-debug.apk
 
       - name: Upload AAB artifact
@@ -53,13 +53,28 @@ jobs:
           name: TransportLogPro-release-aab
           path: app/build/outputs/bundle/release/app-release.aab
 
-      - name: Publish QR TEST APK (keep existing downloads unchanged)
+      - name: Publish QR FIX APK and ALZip-compatible ZIP
         run: |
           mkdir -p downloads
-          cp app/build/outputs/apk/debug/app-debug.apk downloads/TransportLogPro-QR-TEST.apk
+          cp app/build/outputs/apk/debug/app-debug.apk downloads/TransportLogPro-QR-FIX.apk
+          python3 - <<'PY'
+          from pathlib import Path
+          from zipfile import ZipFile, ZIP_DEFLATED
+          apk = Path("downloads/TransportLogPro-QR-FIX.apk")
+          message = (
+              "운송일보 PRO QR수정 테스트앱 (1.5.2)\\n"
+              "1. 휴대폰에서 ZIP 파일을 내 파일 또는 알집으로 압축 해제하세요.\\n"
+              "2. 압축을 푼 TransportLogPro-QR-FIX.apk 파일을 눌러 설치하세요.\\n"
+              "3. 카메라 권한을 허용하고 QR 스캔과 QR 사진 촬영/선택을 시험하세요.\\n"
+              "4. 기존 운송일보 앱은 삭제하지 마세요. 데이터는 앱별로 별도 저장됩니다.\\n"
+          )
+          with ZipFile("downloads/TransportLogPro-QR-FIX-ALZip.zip", "w", ZIP_DEFLATED) as z:
+              z.write(apk, apk.name)
+              z.writestr("설치안내.txt", message.encode("utf-8"))
+          PY
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add -f downloads/TransportLogPro-QR-TEST.apk
+          git add -f downloads/TransportLogPro-QR-FIX.apk downloads/TransportLogPro-QR-FIX-ALZip.zip
           if git diff --cached --quiet; then
             echo "APK unchanged"
           else
