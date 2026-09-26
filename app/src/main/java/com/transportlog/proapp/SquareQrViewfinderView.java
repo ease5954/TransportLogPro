@@ -29,7 +29,7 @@ public class SquareQrViewfinderView extends ViewfinderView {
     }
 
     @Override
-    protected void onDraw(Canvas canvas) {
+    public void onDraw(Canvas canvas) {
         // This is only a visual guide. The native decoder sees its original,
         // larger framing rectangle, so this view cannot crop readable QR data.
         Rect originalFrame = cameraPreview == null ? null : cameraPreview.getFramingRect();
