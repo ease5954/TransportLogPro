@@ -8,31 +8,35 @@ import android.widget.FrameLayout;
 
 import com.journeyapps.barcodescanner.CaptureActivity;
 import com.journeyapps.barcodescanner.DecoratedBarcodeView;
-import com.journeyapps.barcodescanner.Size;
 
+/**
+ * Keep the library's proven camera + decoder settings, with a square guide only.
+ * The previous implementation reduced the actual decode frame to 250dp and could
+ * miss a QR code even when it was visible in the camera preview.
+ */
 public class CustomQrCaptureActivity extends CaptureActivity {
-
     @Override
     protected DecoratedBarcodeView initializeContent() {
         DecoratedBarcodeView scannerView = super.initializeContent();
 
-        int frameSize = dp(250);
-        scannerView.getBarcodeView().setFramingRectSize(new Size(frameSize, frameSize));
+        // This only changes the visual guide: do not crop the decoder preview.
         scannerView.getViewFinder().setLaserVisibility(false);
+        scannerView.getViewFinder().setVisibility(View.INVISIBLE);
 
-        View squareFrame = new View(this);
-        GradientDrawable frameDrawable = new GradientDrawable();
-        frameDrawable.setColor(Color.TRANSPARENT);
-        frameDrawable.setStroke(dp(4), Color.rgb(33, 196, 107));
-        frameDrawable.setCornerRadius(dp(16));
-        squareFrame.setBackground(frameDrawable);
-        squareFrame.setClickable(false);
-        squareFrame.setFocusable(false);
+        View guide = new View(this);
+        GradientDrawable border = new GradientDrawable();
+        border.setColor(Color.TRANSPARENT);
+        border.setStroke(dp(3), Color.rgb(33, 196, 107));
+        border.setCornerRadius(dp(16));
+        guide.setBackground(border);
+        guide.setClickable(false);
+        guide.setFocusable(false);
 
-        FrameLayout.LayoutParams frameParams = new FrameLayout.LayoutParams(frameSize, frameSize);
-        frameParams.gravity = Gravity.CENTER;
-        scannerView.addView(squareFrame, frameParams);
-
+        int width = getResources().getDisplayMetrics().widthPixels;
+        int size = Math.min(dp(240), width - dp(48));
+        FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(size, size);
+        params.gravity = Gravity.CENTER;
+        scannerView.addView(guide, params);
         return scannerView;
     }
 

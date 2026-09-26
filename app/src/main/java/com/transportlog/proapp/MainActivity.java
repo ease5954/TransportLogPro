@@ -48,6 +48,7 @@ import java.util.Collections;
 public class MainActivity extends Activity {
 
     private static final int CAMERA_PERMISSION_REQUEST = 501;
+    private static final int NATIVE_QR_CAMERA_PERMISSION_REQUEST = 503;
     private static final int FILE_CHOOSER_REQUEST = 502;
 
     private WebView webView;
@@ -226,25 +227,38 @@ public class MainActivity extends Activity {
 
     private void startNativeQrScanner() {
         runOnUiThread(() -> {
-            try {
-                IntentIntegrator integrator = new IntentIntegrator(MainActivity.this);
-                integrator.setCaptureActivity(CustomQrCaptureActivity.class);
-                integrator.setDesiredBarcodeFormats(Collections.singletonList("QR_CODE"));
-                integrator.setPrompt("QR 코드를 사각형 안에 맞춰주세요");
-                integrator.setCameraId(0);
-                integrator.setBeepEnabled(true);
-                integrator.setBarcodeImageEnabled(false);
-                integrator.setOrientationLocked(true);
-                Toast.makeText(MainActivity.this, "QR 스캐너를 시작합니다.", Toast.LENGTH_SHORT).show();
-                integrator.initiateScan();
-            } catch (Exception e) {
-                Toast.makeText(
+            // QR scanner uses an Android Activity, not the WebView camera permission.
+            if (ContextCompat.checkSelfPermission(MainActivity.this, Manifest.permission.CAMERA)
+                    != PackageManager.PERMISSION_GRANTED) {
+                ActivityCompat.requestPermissions(
                         MainActivity.this,
-                        "QR 스캐너 시작 실패: " + e.getMessage(),
-                        Toast.LENGTH_LONG
-                ).show();
+                        new String[]{Manifest.permission.CAMERA},
+                        NATIVE_QR_CAMERA_PERMISSION_REQUEST
+                );
+                return;
             }
+            launchNativeQrScanner();
         });
+    }
+
+    private void launchNativeQrScanner() {
+        try {
+            IntentIntegrator integrator = new IntentIntegrator(MainActivity.this);
+            integrator.setCaptureActivity(CustomQrCaptureActivity.class);
+            integrator.setDesiredBarcodeFormats(Collections.singletonList("QR_CODE"));
+            integrator.setPrompt("QR 코드를 사각형 안에 맞춰주세요");
+            integrator.setCameraId(0);
+            integrator.setBeepEnabled(true);
+            integrator.setBarcodeImageEnabled(false);
+            integrator.setOrientationLocked(true);
+            integrator.initiateScan();
+        } catch (Exception e) {
+            Toast.makeText(
+                    MainActivity.this,
+                    "QR 카메라 실행 실패: " + e.getMessage(),
+                    Toast.LENGTH_LONG
+            ).show();
+        }
     }
 
     private void deliverQrResultToWeb(String rawValue) {
@@ -263,6 +277,19 @@ public class MainActivity extends Activity {
             @NonNull String[] permissions,
             @NonNull int[] grantResults) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+
+        if (requestCode == NATIVE_QR_CAMERA_PERMISSION_REQUEST) {
+            if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+                launchNativeQrScanner();
+            } else {
+                Toast.makeText(
+                        this,
+                        "QR 스캔을 사용하려면 앱 설정에서 카메라 권한을 허용해주세요.",
+                        Toast.LENGTH_LONG
+                ).show();
+            }
+            return;
+        }
 
         if (requestCode == CAMERA_PERMISSION_REQUEST && pendingWebPermission != null) {
             if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {

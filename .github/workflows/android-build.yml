@@ -44,7 +44,7 @@ jobs:
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: TransportLogPro-HEADER-debug-apk
+          name: TransportLogPro-QR-debug-apk
           path: app/build/outputs/apk/debug/app-debug.apk
 
       - name: Upload AAB artifact
@@ -53,13 +53,13 @@ jobs:
           name: TransportLogPro-release-aab
           path: app/build/outputs/bundle/release/app-release.aab
 
-      - name: Publish header TEST APK (keep existing downloads unchanged)
+      - name: Publish QR TEST APK (keep existing downloads unchanged)
         run: |
           mkdir -p downloads
-          cp app/build/outputs/apk/debug/app-debug.apk downloads/TransportLogPro-HEADER-TEST.apk
+          cp app/build/outputs/apk/debug/app-debug.apk downloads/TransportLogPro-QR-TEST.apk
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add -f downloads/TransportLogPro-HEADER-TEST.apk
+          git add -f downloads/TransportLogPro-QR-TEST.apk
           if git diff --cached --quiet; then
             echo "APK unchanged"
           else
