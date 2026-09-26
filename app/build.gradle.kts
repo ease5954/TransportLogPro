@@ -10,15 +10,15 @@ android {
         applicationId = "com.transportlog.proapp"
         minSdk = 24
         targetSdk = 36
-        versionCode = 9
-        versionName = "1.5.3"
+        versionCode = 10
+        versionName = "1.5.4"
     }
 
     buildTypes {
         // Install the QR test build beside the original and header-test apps; preserve their data.
         debug {
-            applicationIdSuffix = ".qrsquare"
-            versionNameSuffix = "-qr-square"
+            applicationIdSuffix = ".qrauto"
+            versionNameSuffix = "-qr-auto"
         }
         release {
             isMinifyEnabled = false
@@ -40,4 +40,5 @@ dependencies {
     implementation("androidx.core:core:1.17.0")
     implementation("com.journeyapps:zxing-android-embedded:4.3.0")
     implementation("com.google.zxing:core:3.5.3")
+    implementation("com.google.android.gms:play-services-code-scanner:16.1.0")
 }

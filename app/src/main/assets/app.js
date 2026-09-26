@@ -39,6 +39,14 @@ function openInsurance(fromDrawer){if(fromDrawer)$('drawer').classList.remove('s
 function closeInsurance(){$('insurance').classList.remove('show')}
 function showAppInfo(fromDrawer){if(fromDrawer)$('drawer').classList.remove('show');$('appInfo').classList.add('show');$('appInfo').scrollTop=0}
 function closeAppInfo(){$('appInfo').classList.remove('show')}
+function showQrStatus(message){const el=$('qrStatus');if(el)el.textContent=String(message||'');}
+function startQRFallback(){
+  if(window.AndroidBridge&&typeof window.AndroidBridge.startNativeQrFallbackScan==='function'){
+    try{showQrStatus('보조 QR 카메라를 여는 중입니다.');window.AndroidBridge.startNativeQrFallbackScan();return}
+    catch(e){showQrStatus('보조 QR 카메라 실행 실패: '+String(e));}
+  }
+  startQR();
+}
 function startQR(){if(window.AndroidBridge&&typeof window.AndroidBridge.startNativeQrScan==='function'){try{window.AndroidBridge.startNativeQrScan();return}catch(e){toast('QR 카메라 실행에 실패했습니다');return}}if(!window.Html5Qrcode){toast('QR 모듈을 불러오지 못했습니다');return}if(qrScanner&&qrScanner.isScanning)return;qrScanner=new Html5Qrcode('qr-reader');qrScanner.start({facingMode:'environment'},{fps:10,qrbox:{width:230,height:230}},text=>{qrScanner.stop().catch(()=>{});applyQR(text)},()=>{}).catch(e=>toast('카메라 권한을 허용해주세요'))}
 function startQRPhoto(){if(window.AndroidBridge&&typeof window.AndroidBridge.startNativeQrPhotoScan==='function'){try{window.AndroidBridge.startNativeQrPhotoScan();return}catch(e){toast('QR 사진 선택을 열지 못했습니다');return}}const input=$('qrPhoto');if(input)input.click()}
 async function scanPhoto(e){const f=e.target.files&&e.target.files[0];if(!f)return;try{const q=new Html5Qrcode('qr-reader'),text=await q.scanFile(f,true);applyQR(text)}catch(err){toast('QR을 인식하지 못했습니다')}finally{e.target.value=''}}

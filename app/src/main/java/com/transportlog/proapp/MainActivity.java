@@ -45,6 +45,9 @@ import com.google.zxing.RGBLuminanceSource;
 import com.google.zxing.ReaderException;
 import com.google.zxing.Result;
 import com.google.zxing.common.HybridBinarizer;
+import com.google.mlkit.vision.barcode.common.Barcode;
+import com.google.mlkit.vision.codescanner.GmsBarcodeScannerOptions;
+import com.google.mlkit.vision.codescanner.GmsBarcodeScanning;
 import com.google.zxing.integration.android.IntentIntegrator;
 import com.google.zxing.integration.android.IntentResult;
 
@@ -70,6 +73,7 @@ public class MainActivity extends Activity {
     private ValueCallback<Uri[]> filePathCallback;
     private Uri cameraOutputUri;
     private Uri nativeQrCameraOutputUri;
+    private boolean googleQrScannerOpen;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -223,9 +227,69 @@ public class MainActivity extends Activity {
         webView.loadUrl("https://appassets.androidplatform.net/assets/index.html");
     }
 
+    private void showQrScannerStatus(String message) {
+        runOnUiThread(() -> {
+            if (webView != null) {
+                webView.evaluateJavascript(
+                        "if(typeof showQrStatus==='function')showQrStatus("
+                                + JSONObject.quote(message) + ")",
+                        null
+                );
+            }
+        });
+    }
+
+    /**
+     * Prefer Google Code Scanner with autofocus/auto-zoom and its own camera UI.
+     * On devices without the required Play services module, fall back to the
+     * locally bundled ZXing scanner instead of leaving the button unresponsive.
+     */
     private void startNativeQrScanner() {
         runOnUiThread(() -> {
-            // QR scanner uses an Android Activity, not the WebView camera permission.
+            if (googleQrScannerOpen) return;
+            googleQrScannerOpen = true;
+            showQrScannerStatus("자동 확대 QR 카메라를 여는 중입니다. 처음에는 잠시 걸릴 수 있습니다.");
+            try {
+                GmsBarcodeScannerOptions options = new GmsBarcodeScannerOptions.Builder()
+                        .setBarcodeFormats(Barcode.FORMAT_QR_CODE)
+                        .enableAutoZoom()
+                        .build();
+                GmsBarcodeScanning.getClient(MainActivity.this, options)
+                        .startScan()
+                        .addOnSuccessListener(barcode -> {
+                            googleQrScannerOpen = false;
+                            String decoded = barcode.getRawValue();
+                            if (decoded == null || decoded.trim().isEmpty()) {
+                                decoded = barcode.getDisplayValue();
+                            }
+                            if (decoded != null && !decoded.trim().isEmpty()) {
+                                showQrScannerStatus("QR 판독 완료. 운송정보를 확인합니다.");
+                                deliverQrResultToWeb(decoded);
+                            } else {
+                                showQrScannerStatus("QR을 감지했지만 문자 데이터를 읽지 못했습니다. 보조 카메라로 다시 시도해 주세요.");
+                                Toast.makeText(MainActivity.this,
+                                        "QR 내용이 비어 있습니다. 다시 시도해 주세요.", Toast.LENGTH_LONG).show();
+                            }
+                        })
+                        .addOnCanceledListener(() -> {
+                            googleQrScannerOpen = false;
+                            showQrScannerStatus("QR 스캔을 취소했습니다. 다시 시도할 수 있습니다.");
+                        })
+                        .addOnFailureListener(error -> {
+                            googleQrScannerOpen = false;
+                            showQrScannerStatus("자동 QR 카메라를 열 수 없어 보조 카메라를 실행합니다.");
+                            startZxingFallbackScanner();
+                        });
+            } catch (Exception | LinkageError error) {
+                googleQrScannerOpen = false;
+                showQrScannerStatus("자동 QR 카메라를 사용할 수 없어 보조 카메라를 실행합니다.");
+                startZxingFallbackScanner();
+            }
+        });
+    }
+
+    private void startZxingFallbackScanner() {
+        runOnUiThread(() -> {
             if (ContextCompat.checkSelfPermission(MainActivity.this, Manifest.permission.CAMERA)
                     != PackageManager.PERMISSION_GRANTED) {
                 ActivityCompat.requestPermissions(
@@ -242,21 +306,17 @@ public class MainActivity extends Activity {
     private void launchNativeQrScanner() {
         try {
             IntentIntegrator integrator = new IntentIntegrator(MainActivity.this);
-            // Use the library default CaptureActivity: this is the scanner
-            // that worked before the custom square overlay was added.
+            // Let ZXing choose the back camera. Camera ID 0 is not universally rear.
             integrator.setDesiredBarcodeFormats(Collections.singletonList("QR_CODE"));
             integrator.setPrompt("QR 코드를 사각형 안에 맞춰주세요");
-            integrator.setCameraId(0);
             integrator.setBeepEnabled(true);
             integrator.setBarcodeImageEnabled(false);
             integrator.setOrientationLocked(true);
             integrator.initiateScan();
         } catch (Exception e) {
-            Toast.makeText(
-                    MainActivity.this,
-                    "QR 카메라 실행 실패: " + e.getMessage(),
-                    Toast.LENGTH_LONG
-            ).show();
+            showQrScannerStatus("보조 QR 카메라 실행 실패: " + e.getMessage());
+            Toast.makeText(MainActivity.this,
+                    "QR 카메라 실행 실패: " + e.getMessage(), Toast.LENGTH_LONG).show();
         }
     }
 
@@ -484,6 +544,11 @@ public class MainActivity extends Activity {
         @JavascriptInterface
         public void startNativeQrScan() {
             startNativeQrScanner();
+        }
+
+        @JavascriptInterface
+        public void startNativeQrFallbackScan() {
+            startZxingFallbackScanner();
         }
 
         @JavascriptInterface
