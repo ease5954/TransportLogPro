@@ -10,15 +10,15 @@ android {
         applicationId = "com.transportlog.proapp"
         minSdk = 24
         targetSdk = 36
-        versionCode = 8
-        versionName = "1.5.2"
+        versionCode = 9
+        versionName = "1.5.3"
     }
 
     buildTypes {
         // Install the QR test build beside the original and header-test apps; preserve their data.
         debug {
-            applicationIdSuffix = ".qrfix"
-            versionNameSuffix = "-qr-fix"
+            applicationIdSuffix = ".qrsquare"
+            versionNameSuffix = "-qr-square"
         }
         release {
             isMinifyEnabled = false
