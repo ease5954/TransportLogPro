@@ -6,6 +6,7 @@ import android.content.ActivityNotFoundException;
 import android.content.ContentValues;
 import android.content.Intent;
 import android.content.pm.PackageManager;
+import android.graphics.Color;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
@@ -22,12 +23,16 @@ import android.webkit.WebResourceResponse;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
+import android.widget.FrameLayout;
 import android.widget.Toast;
 
 import androidx.annotation.NonNull;
 import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
 import androidx.core.content.FileProvider;
+import androidx.core.graphics.Insets;
+import androidx.core.view.ViewCompat;
+import androidx.core.view.WindowInsetsCompat;
 import androidx.webkit.WebViewAssetLoader;
 
 import com.google.zxing.integration.android.IntentIntegrator;
@@ -54,8 +59,31 @@ public class MainActivity extends Activity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
 
+        // Android 15+ draws apps behind the status bar. Keep the existing HTML
+        // layout unchanged, but move its entire WebView below the system clock.
+        FrameLayout safeAreaRoot = new FrameLayout(this);
+        safeAreaRoot.setBackgroundColor(Color.WHITE);
         webView = new WebView(this);
-        setContentView(webView);
+        safeAreaRoot.addView(webView, new FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT,
+                FrameLayout.LayoutParams.MATCH_PARENT
+        ));
+        if (Build.VERSION.SDK_INT >= 35) {
+            ViewCompat.setOnApplyWindowInsetsListener(safeAreaRoot, (view, windowInsets) -> {
+                Insets topSafeArea = windowInsets.getInsets(
+                        WindowInsetsCompat.Type.statusBars()
+                                | WindowInsetsCompat.Type.displayCutout()
+                );
+                // Only the top/side system insets are applied here. The existing
+                // bottom navigation and its CSS safe-area margin remain untouched.
+                view.setPadding(topSafeArea.left, topSafeArea.top, topSafeArea.right, 0);
+                return windowInsets;
+            });
+        }
+        setContentView(safeAreaRoot);
+        if (Build.VERSION.SDK_INT >= 35) {
+            ViewCompat.requestApplyInsets(safeAreaRoot);
+        }
 
         WebSettings settings = webView.getSettings();
         settings.setJavaScriptEnabled(true);

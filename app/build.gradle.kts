@@ -15,10 +15,10 @@ android {
     }
 
     buildTypes {
-        // Install this QA build alongside the existing app. Never change the production ID.
+        // Keep the original and prior test app installed while checking the header. Production ID unchanged.
         debug {
-            applicationIdSuffix = ".test"
-            versionNameSuffix = "-test"
+            applicationIdSuffix = ".test2"
+            versionNameSuffix = "-header-test"
         }
         release {
             isMinifyEnabled = false
