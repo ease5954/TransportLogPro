@@ -42,7 +42,7 @@ jobs:
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: TransportLogPro-debug-apk
+          name: TransportLogPro-TEST-debug-apk
           path: app/build/outputs/apk/debug/app-debug.apk
 
       - name: Upload AAB artifact
@@ -51,16 +51,16 @@ jobs:
           name: TransportLogPro-release-aab
           path: app/build/outputs/bundle/release/app-release.aab
 
-      - name: Publish latest APK for direct mobile download
+      - name: Publish separate TEST APK (keep production download unchanged)
         run: |
           mkdir -p downloads
-          cp app/build/outputs/apk/debug/app-debug.apk downloads/TransportLogPro-latest.apk
+          cp app/build/outputs/apk/debug/app-debug.apk downloads/TransportLogPro-TEST-latest.apk
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add -f downloads/TransportLogPro-latest.apk
           if git diff --cached --quiet; then
             echo "APK unchanged"
           else
-            git commit -m "Publish latest Android APK [skip ci]"
+            git commit -m "Publish latest TEST Android APK [skip ci]"
             git push
           fi

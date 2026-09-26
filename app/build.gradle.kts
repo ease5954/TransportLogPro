@@ -15,6 +15,11 @@ android {
     }
 
     buildTypes {
+        // Install this QA build alongside the existing app. Never change the production ID.
+        debug {
+            applicationIdSuffix = ".test"
+            versionNameSuffix = "-test"
+        }
         release {
             isMinifyEnabled = false
             proguardFiles(
