@@ -62,9 +62,9 @@ function parseTransportQR(text){
     const date=formatQrSlipDate(q[7]);
     if(!date)return {valid:false,reason:'운송장 출하일자를 확인할 수 없습니다.',raw};
     return {valid:true,type:'cement-slip',slip:String(q[1]||'').trim(),
-      carrier:String(q[2]||'').trim(),vehicle:String(q[3]||'').trim(),
-      weight:w,loading:String(q[6]||'').trim(),date,
-      time:String(q[8]||'').trim(),customer:String(q[9]||'').trim(),
+      carrier:String(q[2]||'').trim()==='(주)이진특'?'(주)이진특수':String(q[2]||'').trim(),vehicle:String(q[3]||'').trim(),
+      weight:w,loading:String(q[6]||'').trim()==='한일영월'?'한일시멘트(영월)':String(q[6]||'').trim(),date,
+      time:String(q[8]||'').trim(),customer:String(q[9]||'').trim()==='삼양레미콘('?'삼양레미콘(주)':String(q[9]||'').trim(),
       unloading:String(q[10]||'').trim(),driver:String(q[11]||'').trim(),raw};
   }
   let d={};
@@ -101,11 +101,16 @@ function applyQR(text){
    toast(q.reason);return false;
  }
  if(resultBox){resultBox.style.display='none';resultBox.textContent='';}
- const c=matchQrClient(q.customer);
+ let c=matchQrClient(q.customer);
+ if(!c&&q.type==='cement-slip'&&q.customer==='삼양레미콘(주)'){
+   c={id:Date.now(),name:q.customer,loading:q.loading||q.customer,transport:q.carrier||'',rates:[]};
+   clients.push(c);save('clients',clients);
+ }
  // Never create an incomplete client from truncated QR customer data.
  if(c){fillClients();$('regClient').value=c.id;applyClient();}
  else {$('regClient').value='';$('rateChoices').innerHTML='';$('regLoading').value='';$('regUnloading').value='';$('regAggregate').value='';$('regTransport').value='';$('regPrice').value='';window.regItem='';}
  go('register');
+ if(c){fillClients();$('regClient').value=c.id;applyClient();}
  if(q.loading)$('regLoading').value=q.loading;
  if(q.unloading&&q.type!=='cement-slip')$('regUnloading').value=q.unloading;
  if(q.unloading&&q.type==='cement-slip'&&c&&c.unloading&&normalizeQrName(c.unloading).startsWith(normalizeQrName(q.unloading)))$('regUnloading').value=c.unloading;
