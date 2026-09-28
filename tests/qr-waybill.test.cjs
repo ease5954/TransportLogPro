@@ -6,7 +6,7 @@ const source=fs.readFileSync('app/src/main/assets/app.js','utf8');
 const start=source.indexOf('function normalizeQrName(');
 const end=source.indexOf('function matchQrClient(',start);
 assert.ok(start>=0&&end>start,'QR parser exists');
-const scope={Date,Number,String,TextDecoder,Uint8Array};
+const scope={Date,Number,String,TextDecoder,Uint8Array,logs:[],$:()=>({value:''})};
 vm.createContext(scope);
 vm.runInContext(source.slice(start,end),scope);
 
