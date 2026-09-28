@@ -49,7 +49,7 @@ jobs:
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: TransportLogPro-QR-SLIP-debug-apk
+          name: TransportLogPro-QR-3FORMATS-debug-apk
           path: app/build/outputs/apk/debug/app-debug.apk
 
       - name: Upload AAB artifact
@@ -58,28 +58,28 @@ jobs:
           name: TransportLogPro-release-aab
           path: app/build/outputs/bundle/release/app-release.aab
 
-      - name: Publish cement slip QR APK and ALZip-compatible ZIP
+      - name: Publish 3-format QR APK and ALZip-compatible ZIP
         run: |
           mkdir -p downloads
-          cp app/build/outputs/apk/debug/app-debug.apk downloads/TransportLogPro-QR-SLIP.apk
+          cp app/build/outputs/apk/debug/app-debug.apk downloads/TransportLogPro-QR-3FORMATS.apk
           python3 - <<'PY'
           from pathlib import Path
           from zipfile import ZipFile, ZIP_DEFLATED
-          apk = Path("downloads/TransportLogPro-QR-SLIP.apk")
+          apk = Path("downloads/TransportLogPro-QR-3FORMATS.apk")
           message = (
-              "운송일보 PRO QR 운송장 자동입력 앱 (1.5.5)\\n"
+              "운송일보 PRO 3종 운송장 QR 자동입력 앱 (1.5.6)\\n"
               "1. 휴대폰에서 ZIP 파일을 내 파일 또는 알집으로 압축 해제하세요.\\n"
-              "2. 압축을 푼 TransportLogPro-QR-SLIP.apk 파일을 눌러 설치하세요.\\n"
+              "2. 압축을 푼 TransportLogPro-QR-3FORMATS.apk 파일을 눌러 설치하세요.\\n"
               "3. 카메라 권한을 허용하고 QR 스캔과 QR 사진 촬영/선택을 시험하세요.\\n"
               "4. 기존 운송일보 앱은 삭제하지 마세요. 데이터는 앱별로 별도 저장됩니다.\\n"
           )
-          with ZipFile("downloads/TransportLogPro-QR-SLIP-ALZip.zip", "w", ZIP_DEFLATED) as z:
+          with ZipFile("downloads/TransportLogPro-QR-3FORMATS-ALZip.zip", "w", ZIP_DEFLATED) as z:
               z.write(apk, apk.name)
               z.writestr("설치안내.txt", message.encode("utf-8"))
           PY
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add -f downloads/TransportLogPro-QR-SLIP.apk downloads/TransportLogPro-QR-SLIP-ALZip.zip
+          git add -f downloads/TransportLogPro-QR-3FORMATS.apk downloads/TransportLogPro-QR-3FORMATS-ALZip.zip
           if git diff --cached --quiet; then
             echo "APK unchanged"
           else

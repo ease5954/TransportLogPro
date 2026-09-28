@@ -53,6 +53,7 @@ import com.google.zxing.integration.android.IntentResult;
 
 import org.json.JSONObject;
 
+import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.InputStream;
@@ -326,12 +327,37 @@ public class MainActivity extends Activity {
         if (decoded == null) decoded = "";
         Charset korean = Charset.forName("MS949");
         String best = decoded;
-        // Some shipping slips encode Hangul as CP949 with no QR ECI metadata.
-        // QR scanners then expose Latin-1 mojibake despite successful camera recognition.
+
+        // Some cement slips contain CP949 bytes without ECI metadata. A scanner can
+        // expose those bytes as Latin-1 mojibake and a few bytes as Shift-JIS
+        // half-width Katakana. Rebuild the original byte stream before CP949 decode.
+        try {
+            ByteArrayOutputStream recoveredBytes = new ByteArrayOutputStream();
+            boolean convertible = !decoded.isEmpty();
+            Charset shiftJis = Charset.forName("Shift_JIS");
+            for (int i = 0; i < decoded.length() && convertible; i++) {
+                char c = decoded.charAt(i);
+                if (c <= 0x00FF) {
+                    recoveredBytes.write((byte)c);
+                } else if (c >= 0xFF61 && c <= 0xFF9F) {
+                    byte[] one = String.valueOf(c).getBytes(shiftJis);
+                    if (one.length == 1) recoveredBytes.write(one[0]);
+                    else convertible = false;
+                } else {
+                    convertible = false;
+                }
+            }
+            if (convertible) {
+                String restored = new String(recoveredBytes.toByteArray(), korean);
+                if (scoreQrText(restored) > scoreQrText(best)) best = restored;
+            }
+        } catch (Exception ignored) { }
+
         try {
             String restored = new String(decoded.getBytes(StandardCharsets.ISO_8859_1), korean);
             if (scoreQrText(restored) > scoreQrText(best)) best = restored;
         } catch (Exception ignored) { }
+
         if (rawBytes != null && rawBytes.length > 0) {
             try {
                 String restored = new String(rawBytes, korean);
@@ -347,10 +373,11 @@ public class MainActivity extends Activity {
         for (int i = 0; i < value.length(); i++) {
             char c = value.charAt(i);
             if (c >= 0xAC00 && c <= 0xD7A3) score += 4;
-            if (c == '@') score += 2;
+            if (c == '@' || c == '|') score += 2;
             if (c == '\uFFFD') score -= 12;
         }
-        if (value.contains("CB0010@")) score += 20;
+        if (value.contains("CB0010@") || value.startsWith("SA1|")) score += 20;
+        if (value.matches("(?s).*@\\d{8}@\\d{4,6}@.*")) score += 10;
         return score;
     }
 
