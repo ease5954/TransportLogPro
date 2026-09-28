@@ -51,9 +51,9 @@ function startQR(){if(window.AndroidBridge&&typeof window.AndroidBridge.startNat
 function startQRPhoto(){if(window.AndroidBridge&&typeof window.AndroidBridge.startNativeQrPhotoScan==='function'){try{window.AndroidBridge.startNativeQrPhotoScan();return}catch(e){toast('QR 사진 선택을 열지 못했습니다');return}}const input=$('qrPhoto');if(input)input.click()}
 async function scanPhoto(e){const f=e.target.files&&e.target.files[0];if(!f)return;try{const q=new Html5Qrcode('qr-reader'),text=await q.scanFile(f,true);applyQR(text)}catch(err){toast('QR을 인식하지 못했습니다')}finally{e.target.value=''}}
 function normalizeQrName(v){return String(v||'').replace(/[^0-9a-zA-Z가-힣]/g,'').toLowerCase();}
-function formatQrSlipDate(s){const t=String(s||'');if(!/^\\d{8}$/.test(t))return '';const y=Number(t.slice(0,4)),m=Number(t.slice(4,6)),d=Number(t.slice(6,8));const check=new Date(y,m-1,d);return check.getFullYear()===y&&check.getMonth()===m-1&&check.getDate()===d?y+'. '+m+'. '+d+'.':'';}
+function formatQrSlipDate(s){const t=String(s||'');if(!/^\d{8}$/.test(t))return '';const y=Number(t.slice(0,4)),m=Number(t.slice(4,6)),d=Number(t.slice(6,8));const check=new Date(y,m-1,d);return check.getFullYear()===y&&check.getMonth()===m-1&&check.getDate()===d?y+'. '+m+'. '+d+'.':'';}
 function parseTransportQR(text){
-  const raw=String(text??'').replace(/^[\\u0000-\\u001f]+|[\\u0000-\\u001f]+$/g,'').trim();
+  const raw=String(text??'').replace(/^[\u0000-\u001f]+|[\u0000-\u001f]+$/g,'').trim();
   // Actual cement delivery-note QR: CB0010@slip@carrier@plate@...@NET_TON@plant@YYYYMMDD@HHMM@customer@destination@driver
   const q=raw.split('@');
   if(q[0]==='CB0010'&&q.length>=10){
@@ -69,9 +69,9 @@ function parseTransportQR(text){
   }
   let d={};
   try{const parsed=JSON.parse(raw);if(parsed&&typeof parsed==='object'&&!Array.isArray(parsed))d=parsed.data&&typeof parsed.data==='object'?{...parsed,...parsed.data}:parsed;}
-  catch(e){raw.split(/[;,\\n|]+/).forEach(line=>{const m=line.match(/^([^:=]+)[:=](.+)$/);if(m)d[m[1].trim()]=m[2].trim();});}
+  catch(e){raw.split(/[;,\n|]+/).forEach(line=>{const m=line.match(/^([^:=]+)[:=](.+)$/);if(m)d[m[1].trim()]=m[2].trim();});}
   const get=(...keys)=>{for(const k of keys)if(d[k]!=null&&d[k]!=='')return String(d[k]).trim();return '';};
-  const mapped={valid:true,type:'fields',customer:get('거래처','거래처명','client','customer'),item:get('품목','물품','item'),loading:get('상차지','loading'),unloading:get('하차지','unloading'),aggregate:get('양회사','aggregate'),carrier:get('운송사','transport'),vehicle:get('차량번호','vehicle'),weight:Number(get('실질량','중량','weight').replace(/[^\\d.]/g,''))||0,price:Number(get('단가','price').replace(/,/g,''))||0,date:formatQrSlipDate(get('출하일자','출하일','date').replace(/[^\\d]/g,'')),raw};
+  const mapped={valid:true,type:'fields',customer:get('거래처','거래처명','client','customer'),item:get('품목','물품','item'),loading:get('상차지','loading'),unloading:get('하차지','unloading'),aggregate:get('양회사','aggregate'),carrier:get('운송사','transport'),vehicle:get('차량번호','vehicle'),weight:Number(get('실질량','중량','weight').replace(/[^\d.]/g,''))||0,price:Number(get('단가','price').replace(/,/g,''))||0,date:formatQrSlipDate(get('출하일자','출하일','date').replace(/[^\d]/g,'')),raw};
   if(!Object.entries(mapped).some(([k,v])=>!['valid','type','raw'].includes(k)&&Boolean(v)))return {valid:false,reason:'운송정보 항목이 없는 QR입니다.',raw};
   return mapped;
 }
@@ -97,7 +97,7 @@ function qrFieldNotice(q,client){
 function applyQR(text){
  const q=parseTransportQR(text),resultBox=$('qrResult'),notice=$('regQrNotice');
  if(!q.valid){
-   if(resultBox){resultBox.style.display='block';resultBox.textContent='QR은 읽었지만 자동 입력할 수 없습니다. '+q.reason+'\\n읽힌 내용: '+q.raw.slice(0,600);}
+   if(resultBox){resultBox.style.display='block';resultBox.textContent='QR은 읽었지만 자동 입력할 수 없습니다. '+q.reason+'\n읽힌 내용: '+q.raw.slice(0,600);}
    toast(q.reason);return false;
  }
  if(resultBox){resultBox.style.display='none';resultBox.textContent='';}
@@ -120,9 +120,9 @@ function applyQR(text){
  const missing=qrFieldNotice(q,c);
  if(notice){
    notice.style.display='block';
-   notice.textContent='운송장 QR 확인: '+(q.slip?'번호 '+q.slip+' · ':'')+(q.date||'')+(q.time?' '+q.time:'')+'\\n실질량 '+(q.weight||'-')+'톤 · 차량 '+(q.vehicle||'-')+
-     (q.customer?'\\nQR 거래처: '+q.customer:'')+(q.unloading?'\\nQR 하차지: '+q.unloading:'')+
-     (missing.length?'\\n⚠ 저장 전 확인: '+missing.join(' · '):'\\n등록 내용을 확인한 뒤 저장해 주세요.');
+   notice.textContent='운송장 QR 확인: '+(q.slip?'번호 '+q.slip+' · ':'')+(q.date||'')+(q.time?' '+q.time:'')+'\n실질량 '+(q.weight||'-')+'톤 · 차량 '+(q.vehicle||'-')+
+     (q.customer?'\nQR 거래처: '+q.customer:'')+(q.unloading?'\nQR 하차지: '+q.unloading:'')+
+     (missing.length?'\n⚠ 저장 전 확인: '+missing.join(' · '):'\n등록 내용을 확인한 뒤 저장해 주세요.');
  }
  toast('QR 실질량 '+q.weight+'톤 입력 완료 · 누락 항목 확인');
  return true;
