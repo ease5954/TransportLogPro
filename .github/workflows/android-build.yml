@@ -35,6 +35,11 @@ jobs:
         with:
           gradle-version: '9.6.0'
 
+      - name: Verify QR waybill parsing
+        run: |
+          node --check app/src/main/assets/app.js
+          node tests/qr-waybill.test.cjs
+
       - name: Build debug APK
         run: gradle :app:assembleDebug
 
