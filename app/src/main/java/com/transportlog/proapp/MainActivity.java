@@ -57,6 +57,8 @@ import java.io.File;
 import java.io.FileOutputStream;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.nio.charset.Charset;
+import java.nio.charset.StandardCharsets;
 import java.util.Collections;
 import java.util.EnumMap;
 import java.util.Map;
@@ -258,9 +260,9 @@ public class MainActivity extends Activity {
                         .startScan()
                         .addOnSuccessListener(barcode -> {
                             googleQrScannerOpen = false;
-                            String decoded = barcode.getRawValue();
+                            String decoded = normalizeQrEncoding(barcode.getRawValue(), barcode.getRawBytes());
                             if (decoded == null || decoded.trim().isEmpty()) {
-                                decoded = barcode.getDisplayValue();
+                                decoded = normalizeQrEncoding(barcode.getDisplayValue(), barcode.getRawBytes());
                             }
                             if (decoded != null && !decoded.trim().isEmpty()) {
                                 showQrScannerStatus("QR 판독 완료. 운송정보를 확인합니다.");
@@ -318,6 +320,38 @@ public class MainActivity extends Activity {
             Toast.makeText(MainActivity.this,
                     "QR 카메라 실행 실패: " + e.getMessage(), Toast.LENGTH_LONG).show();
         }
+    }
+
+    private static String normalizeQrEncoding(String decoded, byte[] rawBytes) {
+        if (decoded == null) decoded = "";
+        Charset korean = Charset.forName("MS949");
+        String best = decoded;
+        // Some shipping slips encode Hangul as CP949 with no QR ECI metadata.
+        // QR scanners then expose Latin-1 mojibake despite successful camera recognition.
+        try {
+            String restored = new String(decoded.getBytes(StandardCharsets.ISO_8859_1), korean);
+            if (scoreQrText(restored) > scoreQrText(best)) best = restored;
+        } catch (Exception ignored) { }
+        if (rawBytes != null && rawBytes.length > 0) {
+            try {
+                String restored = new String(rawBytes, korean);
+                if (scoreQrText(restored) > scoreQrText(best)) best = restored;
+            } catch (Exception ignored) { }
+        }
+        return best;
+    }
+
+    private static int scoreQrText(String value) {
+        if (value == null) return -100;
+        int score = 0;
+        for (int i = 0; i < value.length(); i++) {
+            char c = value.charAt(i);
+            if (c >= 0xAC00 && c <= 0xD7A3) score += 4;
+            if (c == '@') score += 2;
+            if (c == '\uFFFD') score -= 12;
+        }
+        if (value.contains("CB0010@")) score += 20;
+        return score;
     }
 
     private void deliverQrResultToWeb(String rawValue) {
@@ -441,7 +475,7 @@ public class MainActivity extends Activity {
             final String errorMessage = failure;
             runOnUiThread(() -> {
                 if (decodedText != null) {
-                    deliverQrResultToWeb(decodedText);
+                    deliverQrResultToWeb(normalizeQrEncoding(decodedText, null));
                 } else {
                     Toast.makeText(MainActivity.this, errorMessage, Toast.LENGTH_LONG).show();
                 }
@@ -486,7 +520,7 @@ public class MainActivity extends Activity {
         IntentResult qrResult = IntentIntegrator.parseActivityResult(requestCode, resultCode, data);
         if (qrResult != null) {
             if (qrResult.getContents() != null) {
-                deliverQrResultToWeb(qrResult.getContents());
+                deliverQrResultToWeb(normalizeQrEncoding(qrResult.getContents(), qrResult.getRawBytes()));
             } else {
                 Toast.makeText(this, "QR 스캔을 취소했습니다.", Toast.LENGTH_SHORT).show();
             }
