@@ -82,20 +82,33 @@ function canonicalAtDestination(customer,v){
  return n;
 }
 function parseAtWaybill(raw){
- const q=raw.split('@');
- if(q.length<10)return null;
- const w=Number(String(q[5]||'').replace(/,/g,''));
- const date=formatQrSlipDate(q[7]);
- if(!Number.isFinite(w)||w<=0||w>100||!date)return null;
- const customer=canonicalAtCustomer(q[9]);
- const isHanil=q[0]==='CB0010';
+ const q=raw.split('@').map(x=>String(x||'').trim());
+ if(q.length<8)return null;
+ const dateIndex=q.findIndex(x=>/^\d{8}$/.test(x));
+ if(dateIndex<0)return null;
+ const weightCandidates=q.map((v,i)=>({i,n:Number(v.replace(/,/g,''))}))
+   .filter(x=>Number.isFinite(x.n)&&x.n>=10&&x.n<=80&&x.i<dateIndex);
+ if(!weightCandidates.length)return null;
+ const weightEntry=weightCandidates[weightCandidates.length-1];
+ const w=weightEntry.n,date=formatQrSlipDate(q[dateIndex]);
+ if(!date)return null;
+ const time=q[dateIndex+1]&&/^\d{4,6}$/.test(q[dateIndex+1])?q[dateIndex+1]:'';
+ const vehicle=q.find(v=>/[가-힣]{1,2}\d{2,3}[가-힣]\d{4}/.test(v))||q[3]||'';
+ const plantRaw=q[dateIndex-1]||q[6]||'';
+ const customerRaw=q[dateIndex+2]||q[9]||'';
+ const destinationRaw=q[dateIndex+3]||q[10]||'';
+ const productRaw=q[0]||'';
+ const isHanil=productRaw==='CB0010';
+ const isSsangyong=!isHanil&&(productRaw.includes('종')||plantRaw.includes('쌍용')||destinationRaw.includes('북평'));
+ if(!isHanil&&!isSsangyong)return null;
+ const customer=canonicalAtCustomer(customerRaw);
  return {valid:true,type:isHanil?'hanil-at':'ssangyong-at',company:isHanil?'한일시멘트':'쌍용C&E',
-   slip:String(q[1]||'').trim(),carrier:canonicalAtCarrier(q[2]),vehicle:String(q[3]||'').trim(),
-   weight:w,loading:canonicalAtPlant(q[6]),date,time:String(q[8]||'').trim(),
-   customer,item:isHanil?'':String(q[0]||'').trim(),
-   unloading:canonicalAtDestination(customer,q[10]),driver:String(q[11]||'').trim(),
+   slip:String(q[1]||'').trim(),carrier:canonicalAtCarrier(q[2]),vehicle,
+   weight:w,loading:canonicalAtPlant(plantRaw),date,time,
+   customer,item:isHanil?'':productRaw,
+   unloading:canonicalAtDestination(customer,destinationRaw),driver:String(q[dateIndex+4]||q[11]||'').trim(),
    customerComplete:customer==='삼양레미콘(주)'||customer==='유진기업-동서울(특수)'||(!customer.endsWith('(')&&customer.length>=4),
-   destinationComplete:isHanil?customer==='삼양레미콘(주)'&&String(q[10]||'').trim().startsWith('경기도 남'):Boolean(String(q[10]||'').trim()),
+   destinationComplete:isHanil?customer==='삼양레미콘(주)'&&destinationRaw.startsWith('경기도 남'):Boolean(destinationRaw),
    raw};
 }
 const SAMPYO_QR={
@@ -151,14 +164,23 @@ function ensureQrClient(q){
  }
  return c;
 }
+function cementGrade(item){const m=String(item||'').match(/([1-5])\s*종/);return m?m[1]:'';}
 function chooseQrItem(q,c){
  if(!q.item)return;
  const rates=c&&c.rates||[],key=normalizeQrName(q.item);
- const match=rates.find(r=>normalizeQrName(r.item)===key)
+ let match=rates.find(r=>normalizeQrName(r.item)===key)
    ||rates.find(r=>normalizeQrName(r.item).includes(key)||key.includes(normalizeQrName(r.item)));
+ if(!match){
+   const grade=cementGrade(q.item);
+   if(grade){
+     const sameGrade=rates.filter(r=>cementGrade(r.item)===grade);
+     if(sameGrade.length===1)match=sameGrade[0];
+   }
+ }
  if(match){chooseRate(match.item,match.price);return;}
  window.regItem=q.item;
- $('regPrice').value=q.price||0;
+ // Do not erase a saved client price merely because the QR itself has no price field.
+ if(q.price)$('regPrice').value=q.price;
 }
 function qrFieldNotice(q,client){
  const missing=[];
@@ -199,6 +221,7 @@ function applyQR(text){
      (q.customer?'\n거래처: '+q.customer:'')+(q.item?'\n품목: '+q.item:'')+(q.loading?'\n상차지: '+q.loading:'')+(q.unloading?'\n하차지: '+q.unloading:'')+
      (missing.length?'\n⚠ 저장 전 확인: '+missing.join(' · '):'\n자동 입력 완료 · 저장 전 내용만 확인해 주세요.');
  }
+ showQrStatus((q.company||'운송장')+' QR 판독 성공 · '+q.weight+'톤');
  toast((q.company||'운송장')+' QR · '+q.weight+'톤 입력 완료');
  return true;
 }

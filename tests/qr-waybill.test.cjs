@@ -26,5 +26,20 @@ assert.equal(q.type,'sampyo-pipe');assert.equal(q.weight,25.75);assert.equal(q.c
 const broken=String.fromCharCode(2)+'3ﾁｾ BK@X@@ÃæºÏ99¹Ù1234@@25.76@½Ö¿ëºÏÆò@20260927@2236@À¯Áø±â¾÷-µ¿¼­¿ï@ºÏÆò°øÀå'+String.fromCharCode(3);
 q=scope.parseTransportQR(broken);assert.equal(q.type,'ssangyong-at');assert.equal(q.item,'3종 BK');assert.equal(q.loading,'쌍용C&E 북평공장');
 
+
+
+// Northpyeong scanners can return CP949 source bytes as Latin-1 + halfwidth characters.
+// This reproduces the observed QR text shape but uses a synthetic plate.
+const brokenBukpyeong=String.fromCharCode(2)
+  +'3ﾁｾ BK@0004202609270BK002@@ÃæºÏ00°¡0000@@25.76@½Ö¿ëºÏÆò@20260927@2236@À¯Áø±â¾÷-µ¿¼­¿ï@ºÏÆò°øÀå'
+  +String.fromCharCode(3);
+q=scope.parseTransportQR(brokenBukpyeong);
+assert.equal(q.type,'ssangyong-at');
+assert.equal(q.weight,25.76);
+assert.equal(q.item,'3종 BK');
+assert.equal(q.loading,'쌍용C&E 북평공장');
+assert.equal(q.customer,'유진기업-동서울(특수)');
+assert.equal(q.unloading,'북평공장');
+
 assert.equal(scope.parseTransportQR('https://example.invalid').valid,false);
 console.log('PASS: Hanil @, Ssangyong @, Sampyo pipe, net-ton conversion, CP949 repair');
