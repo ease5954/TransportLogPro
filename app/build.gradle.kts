@@ -10,15 +10,15 @@ android {
         applicationId = "com.transportlog.proapp"
         minSdk = 24
         targetSdk = 36
-        versionCode = 14
-        versionName = "1.5.8"
+        versionCode = 15
+        versionName = "1.5.9"
     }
 
     buildTypes {
         // Install the QR test build beside the original and header-test apps; preserve their data.
         debug {
-            applicationIdSuffix = ".sampyoprice"
-            versionNameSuffix = "-sampyo-price"
+            applicationIdSuffix = ".ssangyongscan"
+            versionNameSuffix = "-ssangyong-scan"
         }
         release {
             isMinifyEnabled = false

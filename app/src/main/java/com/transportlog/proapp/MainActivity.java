@@ -309,12 +309,17 @@ public class MainActivity extends Activity {
     private void launchNativeQrScanner() {
         try {
             IntentIntegrator integrator = new IntentIntegrator(MainActivity.this);
-            // Let ZXing choose the back camera. Camera ID 0 is not universally rear.
+            // High-density thermal-print fallback used especially for Ssangyong Northpyeong.
+            // Keep the normal Google scanner unchanged; this path is deliberately more aggressive.
+            integrator.setCaptureActivity(CustomQrCaptureActivity.class);
             integrator.setDesiredBarcodeFormats(Collections.singletonList("QR_CODE"));
-            integrator.setPrompt("QR 코드를 사각형 안에 맞춰주세요");
+            integrator.setPrompt("쌍용 QR을 큰 사각형 안에 가득 채워주세요");
             integrator.setBeepEnabled(true);
             integrator.setBarcodeImageEnabled(false);
             integrator.setOrientationLocked(true);
+            integrator.addExtra(DecodeHintType.TRY_HARDER.name(), Boolean.TRUE);
+            integrator.addExtra("CHARACTER_SET", "MS949");
+            integrator.addExtra("SCAN_TYPE", 2);
             integrator.initiateScan();
         } catch (Exception e) {
             showQrScannerStatus("보조 QR 카메라 실행 실패: " + e.getMessage());
