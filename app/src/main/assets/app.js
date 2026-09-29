@@ -116,6 +116,7 @@ const SAMPYO_QR={
  customer:{'1150850000':'미래해운(주)'},
  site:{'1708120081':'미래해운(주)/(주)짜콘'},
  item:{'10000001':'1종시멘트벌크'},
+ price:{'1150850000|10000001':3300},
  vehicle:{'6610':'충북99바6610'}
 };
 function resolveQrVehicle(suffix){
@@ -132,11 +133,13 @@ function parseSampyoWaybill(raw){
  const date=formatQrSlipDate(p[1]);
  const kg=Number(p[8]);
  if(!date||!Number.isFinite(kg)||kg<=0)return {valid:false,reason:'삼표 운송장의 실중량을 확인할 수 없습니다.',raw};
+ const priceKey=String(p[4]||'')+'|'+String(p[6]||'');
  return {valid:true,type:'sampyo-pipe',company:'삼표시멘트',date,time:String(p[2]||'').slice(0,4),
    vehicle:resolveQrVehicle(p[3]),customer:SAMPYO_QR.customer[p[4]]||'',customerCode:p[4]||'',
    unloading:SAMPYO_QR.site[p[5]]||'',siteCode:p[5]||'',item:SAMPYO_QR.item[p[6]]||'',itemCode:p[6]||'',
    slip:p[7]||'',weight:kg/1000,round:p[9]||'',loading:SAMPYO_QR.plant[p[0]]||'삼표시멘트',
-   carrier:'',customerComplete:Boolean(SAMPYO_QR.customer[p[4]]),destinationComplete:Boolean(SAMPYO_QR.site[p[5]]),raw};
+   price:Number(SAMPYO_QR.price[priceKey]||0),carrier:'',
+   customerComplete:Boolean(SAMPYO_QR.customer[p[4]]),destinationComplete:Boolean(SAMPYO_QR.site[p[5]]),raw};
 }
 function parseTransportQR(text){
  const raw=repairQrText(text).replace(/^[\u0000-\u001f]+|[\u0000-\u001f]+$/g,'').trim();
@@ -178,6 +181,14 @@ function chooseQrItem(q,c){
    }
  }
  if(match){chooseRate(match.item,match.price);return;}
+ if(q.type==='sampyo-pipe'&&c&&Number(q.price)>0){
+   c.rates=c.rates||[];
+   c.rates.push({item:q.item,price:Number(q.price)});
+   save('clients',clients);
+   renderRates(c);
+   chooseRate(q.item,Number(q.price));
+   return;
+ }
  window.regItem=q.item;
  // Do not erase a saved client price merely because the QR itself has no price field.
  if(q.price)$('regPrice').value=q.price;

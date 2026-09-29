@@ -20,7 +20,7 @@ assert.equal(q.type,'ssangyong-at');assert.equal(q.weight,25.76);assert.equal(q.
 
 // 3. Sampyo pipe format: weight is kilograms and must convert to tonnes.
 q=scope.parseTransportQR(String.fromCharCode(2)+'SA1|20260929|055942|1234|1150850000|1708120081|10000001|BA202609290012|25750|2'+String.fromCharCode(3));
-assert.equal(q.type,'sampyo-pipe');assert.equal(q.weight,25.75);assert.equal(q.customer,'미래해운(주)');assert.equal(q.item,'1종시멘트벌크');assert.equal(q.loading,'삼표시멘트 삼척공장');assert.equal(q.unloading,'미래해운(주)/(주)짜콘');
+assert.equal(q.type,'sampyo-pipe');assert.equal(q.weight,25.75);assert.equal(q.customer,'미래해운(주)');assert.equal(q.item,'1종시멘트벌크');assert.equal(q.loading,'삼표시멘트 삼척공장');assert.equal(q.unloading,'미래해운(주)/(주)짜콘');assert.equal(q.price,3300,'Sampyo customer+item rate must autofill');
 
 // Mojibake repair path for a CP949 payload where bytes were exposed as Latin-1 / halfwidth.
 const broken=String.fromCharCode(2)+'3ﾁｾ BK@X@@ÃæºÏ99¹Ù1234@@25.76@½Ö¿ëºÏÆò@20260927@2236@À¯Áø±â¾÷-µ¿¼­¿ï@ºÏÆò°øÀå'+String.fromCharCode(3);
