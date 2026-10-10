@@ -21,19 +21,27 @@ scope.showQrStatus=()=>{};
 scope.clients=[];
 vm.runInContext(fix,scope);
 
+// Hanil can return a mixed result: ASCII/control structure is correct while each
+// Korean field is independently exposed as CP949/Latin-1 mojibake.
 const raw=String.fromCharCode(2)
- +'CB0010@0142@(ÁÖ)ÀÌÁøÆ¯@ÃæºÏ99¹Ù6610@@25.71@ÇÑÀÏ¿µ¿ù@20260814@0925@»ï¾ç·¹¹ÌÄÜ( @°æ±âµµ ³² @±èµµÇü'
+ +'CB0010@0321@(ÁÖ)ÀÌÁøÆ¯@ÃæºÏ99¹Ù6610@@25.51@ÇÑÀÏ¿µ¿ù@20261008@1612@»ï¾ç·¹¹ÌÄÜ( @°æ±âµµ ³² @±èÇö»ï'
  +String.fromCharCode(3);
 const q=scope.parseTransportQR(raw);
 assert.equal(q.valid,true);
 assert.equal(q.type,'hanil-at');
 assert.equal(q.company,'한일시멘트');
 assert.equal(q.item,'포틀랜드시멘트(1종)');
-assert.equal(q.weight,25.71);
+assert.equal(q.weight,25.51);
 assert.equal(q.loading,'한일시멘트(영월)');
 assert.equal(q.customer,'삼양레미콘(주)');
 assert.equal(q.unloading,'경기도 남양주시');
 assert.equal(q.carrier,'(주)이진특수');
-assert.equal(q.date,'2026. 8. 14.');
-assert.equal(q.time,'0925');
-console.log('PASS: Hanil CB0010 CP949 payload decodes and autofill fields are complete');
+assert.equal(q.vehicle,'충북99바6610');
+assert.equal(q.date,'2026. 10. 8.');
+assert.equal(q.time,'1612');
+
+// Also prove each field decoder works independently instead of requiring the
+// whole QR string to be mojibake.
+assert.equal(scope.__decodeHanilMojibakeField('ÇÑÀÏ¿µ¿ù'),'한일영월');
+assert.equal(scope.__decodeHanilMojibakeField('삼양레미콘(주)'),'삼양레미콘(주)');
+console.log('PASS: Hanil mixed CP949 fields recover before autofill');
