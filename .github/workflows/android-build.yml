@@ -52,7 +52,7 @@ jobs:
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: TransportLogPro-HANIL-MIXED-debug-apk
+          name: TransportLogPro-HANIL-HD-debug-apk
           path: app/build/outputs/apk/debug/app-debug.apk
 
       - name: Upload AAB artifact
@@ -61,28 +61,29 @@ jobs:
           name: TransportLogPro-release-aab
           path: app/build/outputs/bundle/release/app-release.aab
 
-      - name: Publish Hanil MIXED APK and ALZip-compatible ZIP
+      - name: Publish Hanil HD APK and ALZip-compatible ZIP
         run: |
           mkdir -p downloads
-          cp app/build/outputs/apk/debug/app-debug.apk downloads/TransportLogPro-HANIL-MIXED.apk
+          cp app/build/outputs/apk/debug/app-debug.apk downloads/TransportLogPro-HANIL-HD.apk
           python3 - <<'PY'
           from pathlib import Path
           from zipfile import ZipFile, ZIP_DEFLATED
-          apk = Path("downloads/TransportLogPro-HANIL-MIXED.apk")
+          apk = Path("downloads/TransportLogPro-HANIL-HD.apk")
           message = (
-              "운송일보 PRO 한일 영월 QR 한글복원 수정 앱 (1.6.4)\n"
+              "운송일보 PRO 한일 영월 HD QR 수정 앱 (1.6.5)\n"
               "1. 삼표와 쌍용 기능은 그대로 유지됩니다.\n"
-              "2. 한일 CB0010 QR의 깨진 CP949 한글을 필드별로 복원합니다.\n"
-              "3. 거래처, 상차지, 하차지, 차량번호, 운송사를 정상 한글로 자동 입력합니다.\n"
-              "4. 기존 앱은 삭제하지 마세요. 이 앱은 별도 테스트 앱입니다.\n"
+              "2. 한일 영월은 기존 일반 스캔이 안 잡히면 쌍용에서 성공한 HD ZBar 스캐너를 사용합니다.\n"
+              "3. QR 네 모서리가 사각형 안에 보이도록 15~25cm 거리에서 1~2초 고정하세요.\n"
+              "4. 한일 CB0010 QR의 CP949 한글 복원 로직도 그대로 포함됩니다.\n"
+              "5. 기존 앱은 삭제하지 마세요. 이 앱은 별도 테스트 앱입니다.\n"
           )
-          with ZipFile("downloads/TransportLogPro-HANIL-MIXED-ALZip.zip", "w", ZIP_DEFLATED) as z:
+          with ZipFile("downloads/TransportLogPro-HANIL-HD-ALZip.zip", "w", ZIP_DEFLATED) as z:
               z.write(apk, apk.name)
               z.writestr("설치안내.txt", message.encode("utf-8"))
           PY
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add -f downloads/TransportLogPro-HANIL-MIXED.apk downloads/TransportLogPro-HANIL-MIXED-ALZip.zip
+          git add -f downloads/TransportLogPro-HANIL-HD.apk downloads/TransportLogPro-HANIL-HD-ALZip.zip
           if git diff --cached --quiet; then
             echo "APK unchanged"
           else
