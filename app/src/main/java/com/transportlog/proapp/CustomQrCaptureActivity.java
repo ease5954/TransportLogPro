@@ -34,11 +34,10 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 /**
- * Dedicated high-resolution scanner for dense Ssangyong Bukpyeong receipt QRs.
+ * High-resolution scanner shared by Hanil Yeongwol and Ssangyong Bukpyeong.
  * CameraX keeps the analysis frame near 1920x1080 and ZBar scans the upright
- * luminance frame at density 1. The QR in the user's receipt decodes with ZBar
- * at full resolution but not after aggressive down-scaling, so resolution and
- * orientation are deliberately preserved here.
+ * luminance frame at density 1 so dense or small printed receipt QRs are not
+ * lost by aggressive down-scaling.
  */
 public class CustomQrCaptureActivity extends ComponentActivity {
     private PreviewView previewView;
@@ -54,7 +53,6 @@ public class CustomQrCaptureActivity extends ComponentActivity {
         getWindow().setStatusBarColor(Color.BLACK);
 
         imageScanner = new ImageScanner();
-        // Lower density value = denser scan lines. The old wrapper used 3.
         imageScanner.setConfig(0, Config.X_DENSITY, 1);
         imageScanner.setConfig(0, Config.Y_DENSITY, 1);
         analyzerExecutor = Executors.newSingleThreadExecutor();
@@ -85,7 +83,7 @@ public class CustomQrCaptureActivity extends ComponentActivity {
         root.addView(guide, guideParams);
 
         TextView title = new TextView(this);
-        title.setText("쌍용 북평 전용 HD QR 스캔\nQR 네 모서리가 사각형 안에 모두 보이게 맞춰주세요");
+        title.setText("한일 영월 · 쌍용 북평 전용 HD QR 스캔\nQR 네 모서리가 사각형 안에 모두 보이게 맞춰주세요");
         title.setTextColor(Color.WHITE);
         title.setTextSize(18);
         title.setGravity(Gravity.CENTER);
@@ -142,7 +140,7 @@ public class CustomQrCaptureActivity extends ComponentActivity {
                         analysis
                 );
             } catch (Exception error) {
-                Toast.makeText(this, "쌍용 HD 카메라 실행 실패: " + error.getMessage(), Toast.LENGTH_LONG).show();
+                Toast.makeText(this, "HD QR 카메라 실행 실패: " + error.getMessage(), Toast.LENGTH_LONG).show();
                 setResult(Activity.RESULT_CANCELED);
                 finish();
             }
@@ -163,6 +161,7 @@ public class CustomQrCaptureActivity extends ComponentActivity {
             String result = scan(upright);
             if (result == null) result = scan(centerCrop(upright, 0.90f));
             if (result == null) result = scan(centerCrop(upright, 0.78f));
+            if (result == null) result = scan(centerCrop(upright, 0.66f));
 
             if (result != null && !result.trim().isEmpty()) {
                 final String decoded = result;
