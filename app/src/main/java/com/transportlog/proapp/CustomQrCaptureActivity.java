@@ -5,57 +5,71 @@ import android.content.Intent;
 import android.graphics.Color;
 import android.graphics.drawable.GradientDrawable;
 import android.os.Bundle;
+import android.util.Size;
 import android.view.Gravity;
 import android.view.View;
 import android.widget.FrameLayout;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import androidx.activity.ComponentActivity;
+import androidx.camera.core.CameraSelector;
+import androidx.camera.core.ImageAnalysis;
+import androidx.camera.core.ImageProxy;
+import androidx.camera.core.Preview;
+import androidx.camera.lifecycle.ProcessCameraProvider;
+import androidx.camera.view.PreviewView;
+import androidx.core.content.ContextCompat;
+
+import com.google.common.util.concurrent.ListenableFuture;
 import com.google.zxing.client.android.Intents;
-import com.yanzhenjie.zbar.camera.CameraPreview;
-import com.yanzhenjie.zbar.camera.ScanCallback;
+import com.yanzhenjie.zbar.Config;
+import com.yanzhenjie.zbar.Image;
+import com.yanzhenjie.zbar.ImageScanner;
+import com.yanzhenjie.zbar.Symbol;
+import com.yanzhenjie.zbar.SymbolSet;
+
+import java.nio.ByteBuffer;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 /**
- * Dedicated ZBar scanner for the dense Ssangyong Bukpyeong thermal-print QR.
- *
- * The same receipt photo is not reliably detected by the Google/ZXing path, while
- * ZBar decodes it. Keep this Activity behind the existing "Ssangyong" fallback
- * button so the normal scanner and the rest of the app remain unchanged.
+ * Dedicated high-resolution scanner for dense Ssangyong Bukpyeong receipt QRs.
+ * CameraX keeps the analysis frame near 1920x1080 and ZBar scans the upright
+ * luminance frame at density 1. The QR in the user's receipt decodes with ZBar
+ * at full resolution but not after aggressive down-scaling, so resolution and
+ * orientation are deliberately preserved here.
  */
-public class CustomQrCaptureActivity extends Activity {
-    private CameraPreview preview;
-    private boolean running;
-    private boolean resultDelivered;
+public class CustomQrCaptureActivity extends ComponentActivity {
+    private PreviewView previewView;
+    private ProcessCameraProvider cameraProvider;
+    private ExecutorService analyzerExecutor;
+    private ImageScanner imageScanner;
+    private volatile boolean resultDelivered;
+    private volatile long lastAnalysisMs;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         getWindow().setStatusBarColor(Color.BLACK);
 
+        imageScanner = new ImageScanner();
+        // Lower density value = denser scan lines. The old wrapper used 3.
+        imageScanner.setConfig(0, Config.X_DENSITY, 1);
+        imageScanner.setConfig(0, Config.Y_DENSITY, 1);
+        analyzerExecutor = Executors.newSingleThreadExecutor();
+
         FrameLayout root = new FrameLayout(this);
         root.setBackgroundColor(Color.BLACK);
 
-        preview = new CameraPreview(this);
-        preview.setScanCallback(new ScanCallback() {
-            @Override
-            public void onScanResult(String result) {
-                if (resultDelivered || result == null || result.trim().isEmpty()) return;
-                resultDelivered = true;
-                stopScanner();
-
-                Intent data = new Intent(Intents.Scan.ACTION);
-                data.putExtra(Intents.Scan.RESULT, result);
-                data.putExtra(Intents.Scan.RESULT_FORMAT, "QR_CODE");
-                setResult(RESULT_OK, data);
-                finish();
-            }
-        });
-        root.addView(preview, new FrameLayout.LayoutParams(
+        previewView = new PreviewView(this);
+        previewView.setImplementationMode(PreviewView.ImplementationMode.COMPATIBLE);
+        previewView.setScaleType(PreviewView.ScaleType.FILL_CENTER);
+        root.addView(previewView, new FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.MATCH_PARENT,
                 FrameLayout.LayoutParams.MATCH_PARENT
         ));
 
-        // The guide is visual only. ZBar analyzes the whole camera frame.
         View guide = new View(this);
         GradientDrawable border = new GradientDrawable();
         border.setColor(Color.TRANSPARENT);
@@ -65,18 +79,18 @@ public class CustomQrCaptureActivity extends Activity {
         guide.setClickable(false);
         guide.setFocusable(false);
         int screenWidth = getResources().getDisplayMetrics().widthPixels;
-        int guideSize = Math.min(dp(340), screenWidth - dp(24));
+        int guideSize = Math.min(dp(350), screenWidth - dp(20));
         FrameLayout.LayoutParams guideParams = new FrameLayout.LayoutParams(guideSize, guideSize);
         guideParams.gravity = Gravity.CENTER;
         root.addView(guide, guideParams);
 
         TextView title = new TextView(this);
-        title.setText("쌍용 북평 전용 QR 스캔\nQR을 사각형 안에 크게 맞춰주세요");
+        title.setText("쌍용 북평 전용 HD QR 스캔\nQR 네 모서리가 사각형 안에 모두 보이게 맞춰주세요");
         title.setTextColor(Color.WHITE);
         title.setTextSize(18);
         title.setGravity(Gravity.CENTER);
         title.setPadding(dp(16), dp(14), dp(16), dp(14));
-        title.setBackgroundColor(Color.argb(150, 0, 0, 0));
+        title.setBackgroundColor(Color.argb(155, 0, 0, 0));
         FrameLayout.LayoutParams titleParams = new FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.MATCH_PARENT,
                 FrameLayout.LayoutParams.WRAP_CONTENT
@@ -86,12 +100,12 @@ public class CustomQrCaptureActivity extends Activity {
         root.addView(title, titleParams);
 
         TextView hint = new TextView(this);
-        hint.setText("빛 반사를 피하고 QR 전체가 보이도록 15~25cm 거리에서 비춰주세요");
+        hint.setText("권장 거리 15~25cm · 빛 반사 없이 1~2초 고정");
         hint.setTextColor(Color.WHITE);
-        hint.setTextSize(14);
+        hint.setTextSize(15);
         hint.setGravity(Gravity.CENTER);
         hint.setPadding(dp(18), dp(12), dp(18), dp(12));
-        hint.setBackgroundColor(Color.argb(150, 0, 0, 0));
+        hint.setBackgroundColor(Color.argb(155, 0, 0, 0));
         FrameLayout.LayoutParams hintParams = new FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.MATCH_PARENT,
                 FrameLayout.LayoutParams.WRAP_CONTENT
@@ -101,38 +115,182 @@ public class CustomQrCaptureActivity extends Activity {
         root.addView(hint, hintParams);
 
         setContentView(root);
+        startHighResolutionCamera();
     }
 
-    @Override
-    protected void onResume() {
-        super.onResume();
-        if (!resultDelivered && !running) {
-            running = preview.start();
-            if (!running) {
-                Toast.makeText(this, "쌍용 QR 카메라를 열 수 없습니다.", Toast.LENGTH_LONG).show();
-                setResult(RESULT_CANCELED);
+    private void startHighResolutionCamera() {
+        ListenableFuture<ProcessCameraProvider> future = ProcessCameraProvider.getInstance(this);
+        future.addListener(() -> {
+            try {
+                cameraProvider = future.get();
+                Preview preview = new Preview.Builder()
+                        .setTargetResolution(new Size(1920, 1080))
+                        .build();
+                preview.setSurfaceProvider(previewView.getSurfaceProvider());
+
+                ImageAnalysis analysis = new ImageAnalysis.Builder()
+                        .setTargetResolution(new Size(1920, 1080))
+                        .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
+                        .build();
+                analysis.setAnalyzer(analyzerExecutor, this::analyzeFrame);
+
+                cameraProvider.unbindAll();
+                cameraProvider.bindToLifecycle(
+                        this,
+                        CameraSelector.DEFAULT_BACK_CAMERA,
+                        preview,
+                        analysis
+                );
+            } catch (Exception error) {
+                Toast.makeText(this, "쌍용 HD 카메라 실행 실패: " + error.getMessage(), Toast.LENGTH_LONG).show();
+                setResult(Activity.RESULT_CANCELED);
                 finish();
             }
+        }, ContextCompat.getMainExecutor(this));
+    }
+
+    private void analyzeFrame(ImageProxy proxy) {
+        try {
+            if (resultDelivered) return;
+            long now = System.currentTimeMillis();
+            if (now - lastAnalysisMs < 300) return;
+            lastAnalysisMs = now;
+
+            GrayFrame raw = copyLuma(proxy);
+            int rotation = proxy.getImageInfo().getRotationDegrees();
+            GrayFrame upright = rotate(raw, rotation);
+
+            String result = scan(upright);
+            if (result == null) result = scan(centerCrop(upright, 0.90f));
+            if (result == null) result = scan(centerCrop(upright, 0.78f));
+
+            if (result != null && !result.trim().isEmpty()) {
+                final String decoded = result;
+                resultDelivered = true;
+                runOnUiThread(() -> deliverResult(decoded));
+            }
+        } catch (Throwable ignored) {
+            // Keep the camera alive and analyze the next frame.
+        } finally {
+            proxy.close();
         }
+    }
+
+    private String scan(GrayFrame frame) {
+        if (frame == null || frame.width < 200 || frame.height < 200) return null;
+        Image barcode = new Image(frame.width, frame.height, "Y800");
+        barcode.setData(frame.data);
+        int found = imageScanner.scanImage(barcode);
+        if (found == 0) return null;
+        SymbolSet symbols = imageScanner.getResults();
+        for (Symbol symbol : symbols) {
+            String data = symbol.getData();
+            if (data != null && !data.trim().isEmpty()) return data;
+        }
+        return null;
+    }
+
+    private GrayFrame copyLuma(ImageProxy proxy) {
+        int width = proxy.getWidth();
+        int height = proxy.getHeight();
+        ImageProxy.PlaneProxy plane = proxy.getPlanes()[0];
+        ByteBuffer buffer = plane.getBuffer();
+        int rowStride = plane.getRowStride();
+        int pixelStride = plane.getPixelStride();
+        byte[] out = new byte[width * height];
+
+        if (pixelStride == 1 && rowStride == width) {
+            buffer.rewind();
+            buffer.get(out, 0, Math.min(out.length, buffer.remaining()));
+            return new GrayFrame(out, width, height);
+        }
+
+        byte[] row = new byte[rowStride];
+        for (int y = 0; y < height; y++) {
+            buffer.position(y * rowStride);
+            int available = Math.min(rowStride, buffer.remaining());
+            buffer.get(row, 0, available);
+            for (int x = 0; x < width; x++) {
+                int src = x * pixelStride;
+                if (src < available) out[y * width + x] = row[src];
+            }
+        }
+        return new GrayFrame(out, width, height);
+    }
+
+    private GrayFrame rotate(GrayFrame src, int degrees) {
+        int d = ((degrees % 360) + 360) % 360;
+        if (d == 0) return src;
+        if (d == 180) {
+            byte[] out = new byte[src.data.length];
+            for (int i = 0; i < src.data.length; i++) out[src.data.length - 1 - i] = src.data[i];
+            return new GrayFrame(out, src.width, src.height);
+        }
+        if (d == 90 || d == 270) {
+            int nw = src.height;
+            int nh = src.width;
+            byte[] out = new byte[src.data.length];
+            for (int y = 0; y < src.height; y++) {
+                for (int x = 0; x < src.width; x++) {
+                    int srcIndex = y * src.width + x;
+                    int nx;
+                    int ny;
+                    if (d == 90) {
+                        nx = src.height - 1 - y;
+                        ny = x;
+                    } else {
+                        nx = y;
+                        ny = src.width - 1 - x;
+                    }
+                    out[ny * nw + nx] = src.data[srcIndex];
+                }
+            }
+            return new GrayFrame(out, nw, nh);
+        }
+        return src;
+    }
+
+    private GrayFrame centerCrop(GrayFrame src, float fraction) {
+        int side = Math.max(200, Math.round(Math.min(src.width, src.height) * fraction));
+        side = Math.min(side, Math.min(src.width, src.height));
+        int left = (src.width - side) / 2;
+        int top = (src.height - side) / 2;
+        byte[] out = new byte[side * side];
+        for (int y = 0; y < side; y++) {
+            System.arraycopy(src.data, (top + y) * src.width + left, out, y * side, side);
+        }
+        return new GrayFrame(out, side, side);
+    }
+
+    private void deliverResult(String result) {
+        if (cameraProvider != null) cameraProvider.unbindAll();
+        Intent data = new Intent(Intents.Scan.ACTION);
+        data.putExtra(Intents.Scan.RESULT, result);
+        data.putExtra(Intents.Scan.RESULT_FORMAT, "QR_CODE");
+        setResult(Activity.RESULT_OK, data);
+        finish();
     }
 
     @Override
-    protected void onPause() {
-        stopScanner();
-        super.onPause();
-    }
-
-    private void stopScanner() {
-        if (preview != null && running) {
-            try {
-                preview.stop();
-            } catch (Exception ignored) {
-            }
-            running = false;
-        }
+    protected void onDestroy() {
+        if (cameraProvider != null) cameraProvider.unbindAll();
+        if (analyzerExecutor != null) analyzerExecutor.shutdownNow();
+        super.onDestroy();
     }
 
     private int dp(int value) {
         return Math.round(value * getResources().getDisplayMetrics().density);
+    }
+
+    private static final class GrayFrame {
+        final byte[] data;
+        final int width;
+        final int height;
+
+        GrayFrame(byte[] data, int width, int height) {
+            this.data = data;
+            this.width = width;
+            this.height = height;
+        }
     }
 }
