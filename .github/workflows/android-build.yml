@@ -38,7 +38,9 @@ jobs:
       - name: Verify QR waybill parsing
         run: |
           node --check app/src/main/assets/app.js
+          node --check app/src/main/assets/qr-ssangyong-fix.js
           node tests/qr-waybill.test.cjs
+          node tests/qr-ssangyong-fix.test.cjs
 
       - name: Build debug APK
         run: gradle :app:assembleDebug
@@ -49,7 +51,7 @@ jobs:
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: TransportLogPro-SSANGYONG-ZBAR-debug-apk
+          name: TransportLogPro-SSANGYONG-FIX2-debug-apk
           path: app/build/outputs/apk/debug/app-debug.apk
 
       - name: Upload AAB artifact
@@ -58,28 +60,28 @@ jobs:
           name: TransportLogPro-release-aab
           path: app/build/outputs/bundle/release/app-release.aab
 
-      - name: Publish Ssangyong ZBar APK and ALZip-compatible ZIP
+      - name: Publish Ssangyong FIX2 APK and ALZip-compatible ZIP
         run: |
           mkdir -p downloads
-          cp app/build/outputs/apk/debug/app-debug.apk downloads/TransportLogPro-SSANGYONG-ZBAR.apk
+          cp app/build/outputs/apk/debug/app-debug.apk downloads/TransportLogPro-SSANGYONG-FIX2.apk
           python3 - <<'PY'
           from pathlib import Path
           from zipfile import ZipFile, ZIP_DEFLATED
-          apk = Path("downloads/TransportLogPro-SSANGYONG-ZBAR.apk")
+          apk = Path("downloads/TransportLogPro-SSANGYONG-FIX2.apk")
           message = (
-              "운송일보 PRO 쌍용 북평 ZBar QR 수정 앱 (1.6.0)\\n"
-              "1. 휴대폰에서 APK를 바로 설치할 수 있습니다.\\n"
-              "2. QR 화면에서 쌍용 북평 전용 버튼을 눌러 스캔하세요.\\n"
-              "3. 기존 삼척 단가 자동입력과 한일 QR 기능은 그대로 유지됩니다.\\n"
-              "4. 기존 앱은 삭제하지 마세요. 테스트 앱은 별도로 설치됩니다.\\n"
+              "운송일보 PRO 쌍용 북평 QR 수정 앱 (1.6.2)\n"
+              "1. QR 화면에서 쌍용 북평 전용 버튼을 눌러 스캔하세요.\n"
+              "2. QR의 3종 BK 항목을 자동 등록하고 기존 3종 단가가 있으면 연결합니다.\n"
+              "3. 단가가 없으면 단가만 확인하라는 안내를 표시합니다.\n"
+              "4. 삼척 단가 자동입력과 한일 QR 기능은 그대로 유지됩니다.\n"
           )
-          with ZipFile("downloads/TransportLogPro-SSANGYONG-ZBAR-ALZip.zip", "w", ZIP_DEFLATED) as z:
+          with ZipFile("downloads/TransportLogPro-SSANGYONG-FIX2-ALZip.zip", "w", ZIP_DEFLATED) as z:
               z.write(apk, apk.name)
               z.writestr("설치안내.txt", message.encode("utf-8"))
           PY
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add -f downloads/TransportLogPro-SSANGYONG-ZBAR.apk downloads/TransportLogPro-SSANGYONG-ZBAR-ALZip.zip
+          git add -f downloads/TransportLogPro-SSANGYONG-FIX2.apk downloads/TransportLogPro-SSANGYONG-FIX2-ALZip.zip
           if git diff --cached --quiet; then
             echo "APK unchanged"
           else
