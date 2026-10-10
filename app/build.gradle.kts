@@ -10,15 +10,14 @@ android {
         applicationId = "com.transportlog.proapp"
         minSdk = 24
         targetSdk = 36
-        versionCode = 15
-        versionName = "1.5.9"
+        versionCode = 16
+        versionName = "1.6.0"
     }
 
     buildTypes {
-        // Install the QR test build beside the original and header-test apps; preserve their data.
         debug {
-            applicationIdSuffix = ".ssangyongscan"
-            versionNameSuffix = "-ssangyong-scan"
+            applicationIdSuffix = ".ssangyongzbar"
+            versionNameSuffix = "-ssangyong-zbar"
         }
         release {
             isMinifyEnabled = false
@@ -41,4 +40,5 @@ dependencies {
     implementation("com.journeyapps:zxing-android-embedded:4.3.0")
     implementation("com.google.zxing:core:3.5.3")
     implementation("com.google.android.gms:play-services-code-scanner:16.1.0")
+    implementation("com.yanzhenjie.zbar:camera:1.0.0")
 }

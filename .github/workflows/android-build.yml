@@ -49,7 +49,7 @@ jobs:
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: TransportLogPro-SSANGYONG-SCAN-debug-apk
+          name: TransportLogPro-SSANGYONG-ZBAR-debug-apk
           path: app/build/outputs/apk/debug/app-debug.apk
 
       - name: Upload AAB artifact
@@ -58,28 +58,28 @@ jobs:
           name: TransportLogPro-release-aab
           path: app/build/outputs/bundle/release/app-release.aab
 
-      - name: Publish Ssangyong scan FIX APK and ALZip-compatible ZIP
+      - name: Publish Ssangyong ZBar APK and ALZip-compatible ZIP
         run: |
           mkdir -p downloads
-          cp app/build/outputs/apk/debug/app-debug.apk downloads/TransportLogPro-SSANGYONG-SCAN.apk
+          cp app/build/outputs/apk/debug/app-debug.apk downloads/TransportLogPro-SSANGYONG-ZBAR.apk
           python3 - <<'PY'
           from pathlib import Path
           from zipfile import ZipFile, ZIP_DEFLATED
-          apk = Path("downloads/TransportLogPro-SSANGYONG-SCAN.apk")
+          apk = Path("downloads/TransportLogPro-SSANGYONG-ZBAR.apk")
           message = (
-              "운송일보 PRO 쌍용 북평 고밀도 QR 수정 앱 (1.5.9)\\n"
-              "1. 휴대폰에서 ZIP 파일을 내 파일 또는 알집으로 압축 해제하세요.\\n"
-              "2. 압축을 푼 TransportLogPro-SSANGYONG-SCAN.apk 파일을 눌러 설치하세요.\\n"
-              "3. 카메라 권한을 허용하고 QR 스캔과 QR 사진 촬영/선택을 시험하세요.\\n"
-              "4. 기존 운송일보 앱은 삭제하지 마세요. 데이터는 앱별로 별도 저장됩니다.\\n"
+              "운송일보 PRO 쌍용 북평 ZBar QR 수정 앱 (1.6.0)\\n"
+              "1. 휴대폰에서 APK를 바로 설치할 수 있습니다.\\n"
+              "2. QR 화면에서 쌍용 북평 전용 버튼을 눌러 스캔하세요.\\n"
+              "3. 기존 삼척 단가 자동입력과 한일 QR 기능은 그대로 유지됩니다.\\n"
+              "4. 기존 앱은 삭제하지 마세요. 테스트 앱은 별도로 설치됩니다.\\n"
           )
-          with ZipFile("downloads/TransportLogPro-SSANGYONG-SCAN-ALZip.zip", "w", ZIP_DEFLATED) as z:
+          with ZipFile("downloads/TransportLogPro-SSANGYONG-ZBAR-ALZip.zip", "w", ZIP_DEFLATED) as z:
               z.write(apk, apk.name)
               z.writestr("설치안내.txt", message.encode("utf-8"))
           PY
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add -f downloads/TransportLogPro-SSANGYONG-SCAN.apk downloads/TransportLogPro-SSANGYONG-SCAN-ALZip.zip
+          git add -f downloads/TransportLogPro-SSANGYONG-ZBAR.apk downloads/TransportLogPro-SSANGYONG-ZBAR-ALZip.zip
           if git diff --cached --quiet; then
             echo "APK unchanged"
           else
