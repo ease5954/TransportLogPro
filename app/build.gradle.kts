@@ -10,15 +10,15 @@ android {
         applicationId = "com.transportlog.proapp"
         minSdk = 24
         targetSdk = 36
-        versionCode = 19
-        versionName = "1.6.3"
+        versionCode = 20
+        versionName = "1.6.4"
     }
 
     buildTypes {
         // Separate test package so the existing app and its data stay untouched.
         debug {
-            applicationIdSuffix = ".hanilfinal"
-            versionNameSuffix = "-hanil-final"
+            applicationIdSuffix = ".hanilmixed"
+            versionNameSuffix = "-hanil-mixed"
         }
         release {
             isMinifyEnabled = false
