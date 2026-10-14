@@ -70,12 +70,13 @@ jobs:
           from zipfile import ZipFile, ZIP_DEFLATED
           apk = Path("downloads/TransportLogPro-HANIL-HD.apk")
           message = (
-              "운송일보 PRO 한일 영월 HD QR 수정 앱 (1.6.5)\n"
-              "1. 삼표와 쌍용 기능은 그대로 유지됩니다.\n"
-              "2. 한일 영월은 기존 일반 스캔이 안 잡히면 쌍용에서 성공한 HD ZBar 스캐너를 사용합니다.\n"
-              "3. QR 네 모서리가 사각형 안에 보이도록 15~25cm 거리에서 1~2초 고정하세요.\n"
-              "4. 한일 CB0010 QR의 CP949 한글 복원 로직도 그대로 포함됩니다.\n"
-              "5. 기존 앱은 삭제하지 마세요. 이 앱은 별도 테스트 앱입니다.\n"
+              "운송일보 PRO 한일 영월 HD QR 수정 앱 (1.6.6)\n"
+              "1. 삼표와 쌍용 기능은 기존 원본 ZBar 인식을 먼저 사용해 그대로 유지합니다.\n"
+              "2. 한일 영월 QR은 자동 1.35배 줌, 중앙 자동초점, 터치 재초점을 추가했습니다.\n"
+              "3. 원본 인식 실패 시 명암 보정, Otsu 이진화, 중앙 확대 인식을 순서대로 시도합니다.\n"
+              "4. 한일 CB0010 QR의 CP949 한글 복원과 자동입력 로직은 그대로 포함됩니다.\n"
+              "5. QR 네 모서리를 사각형 안에 맞추고 15~25cm에서 1~2초 고정하세요. 흐리면 QR 부분을 한 번 터치하세요.\n"
+              "6. 기존 앱은 삭제하지 마세요. 이 앱은 별도 테스트 앱입니다.\n"
           )
           with ZipFile("downloads/TransportLogPro-HANIL-HD-ALZip.zip", "w", ZIP_DEFLATED) as z:
               z.write(apk, apk.name)
