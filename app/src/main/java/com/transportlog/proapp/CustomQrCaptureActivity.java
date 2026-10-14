@@ -16,6 +16,7 @@ import android.widget.Toast;
 import androidx.activity.ComponentActivity;
 import androidx.camera.core.Camera;
 import androidx.camera.core.CameraSelector;
+import androidx.camera.core.ExperimentalGetImage;
 import androidx.camera.core.FocusMeteringAction;
 import androidx.camera.core.ImageAnalysis;
 import androidx.camera.core.ImageProxy;
@@ -27,6 +28,11 @@ import androidx.camera.view.PreviewView;
 import androidx.core.content.ContextCompat;
 
 import com.google.common.util.concurrent.ListenableFuture;
+import com.google.mlkit.vision.barcode.BarcodeScanner;
+import com.google.mlkit.vision.barcode.BarcodeScannerOptions;
+import com.google.mlkit.vision.barcode.BarcodeScanning;
+import com.google.mlkit.vision.barcode.common.Barcode;
+import com.google.mlkit.vision.common.InputImage;
 import com.google.zxing.client.android.Intents;
 import com.yanzhenjie.zbar.Config;
 import com.yanzhenjie.zbar.Image;
@@ -35,25 +41,28 @@ import com.yanzhenjie.zbar.Symbol;
 import com.yanzhenjie.zbar.SymbolSet;
 
 import java.nio.ByteBuffer;
+import java.nio.charset.StandardCharsets;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 
 /**
- * High-resolution scanner shared by Hanil Yeongwol, Ssangyong Bukpyeong and Sampyo.
+ * Dual-engine high-resolution QR scanner for cement waybills.
  *
- * The cement waybill QRs can be small, dense and printed on thermal paper. CameraX
- * keeps the analysis stream near 1920x1080, applies a modest digital zoom, allows
- * tap-to-focus, and feeds several luminance variants to ZBar. Raw frames are always
- * attempted first so the already-working Ssangyong/Sampyo path remains unchanged.
+ * Engine 1: ZBar keeps the proven raw luminance path used by Ssangyong/Sampyo.
+ * Engine 2: bundled ML Kit barcode scanning receives the original CameraX frame
+ *           whenever ZBar does not decode it. ML Kit also exposes raw QR bytes,
+ *           which lets MainActivity restore Hanil's CP949 payload reliably.
  */
 public class CustomQrCaptureActivity extends ComponentActivity {
     private PreviewView previewView;
     private ProcessCameraProvider cameraProvider;
     private Camera activeCamera;
     private ExecutorService analyzerExecutor;
-    private ImageScanner imageScanner;
+    private ImageScanner zbarScanner;
+    private BarcodeScanner mlKitScanner;
     private volatile boolean resultDelivered;
+    private volatile boolean mlKitBusy;
     private volatile long lastAnalysisMs;
 
     @Override
@@ -61,11 +70,14 @@ public class CustomQrCaptureActivity extends ComponentActivity {
         super.onCreate(savedInstanceState);
         getWindow().setStatusBarColor(Color.BLACK);
 
-        imageScanner = new ImageScanner();
-        // Density 1 is intentionally kept: dense thermal-print QR modules were lost
-        // with the wrapper's older, sparser scan-line settings.
-        imageScanner.setConfig(0, Config.X_DENSITY, 1);
-        imageScanner.setConfig(0, Config.Y_DENSITY, 1);
+        zbarScanner = new ImageScanner();
+        zbarScanner.setConfig(0, Config.X_DENSITY, 1);
+        zbarScanner.setConfig(0, Config.Y_DENSITY, 1);
+
+        BarcodeScannerOptions mlOptions = new BarcodeScannerOptions.Builder()
+                .setBarcodeFormats(Barcode.FORMAT_QR_CODE)
+                .build();
+        mlKitScanner = BarcodeScanning.getClient(mlOptions);
         analyzerExecutor = Executors.newSingleThreadExecutor();
 
         FrameLayout root = new FrameLayout(this);
@@ -101,12 +113,12 @@ public class CustomQrCaptureActivity extends ComponentActivity {
         root.addView(guide, guideParams);
 
         TextView title = new TextView(this);
-        title.setText("운송 QR 고해상도 스캔\n한일 영월 · 쌍용 북평 · 삼표");
+        title.setText("운송 QR 정밀 스캔 1.6.7\nZBar + ML Kit 이중 판독");
         title.setTextColor(Color.WHITE);
         title.setTextSize(18);
         title.setGravity(Gravity.CENTER);
         title.setPadding(dp(16), dp(14), dp(16), dp(14));
-        title.setBackgroundColor(Color.argb(155, 0, 0, 0));
+        title.setBackgroundColor(Color.argb(165, 0, 0, 0));
         FrameLayout.LayoutParams titleParams = new FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.MATCH_PARENT,
                 FrameLayout.LayoutParams.WRAP_CONTENT
@@ -116,12 +128,12 @@ public class CustomQrCaptureActivity extends ComponentActivity {
         root.addView(title, titleParams);
 
         TextView hint = new TextView(this);
-        hint.setText("QR 네 모서리를 사각형 안에 맞추고 15~25cm에서 1~2초 고정\n흐리면 QR 부분을 화면에서 한 번 터치하세요");
+        hint.setText("QR 네 모서리를 사각형 안에 넣고 15~25cm에서 고정하세요\n흐리면 QR 가운데를 한 번 터치하세요");
         hint.setTextColor(Color.WHITE);
         hint.setTextSize(15);
         hint.setGravity(Gravity.CENTER);
         hint.setPadding(dp(18), dp(12), dp(18), dp(12));
-        hint.setBackgroundColor(Color.argb(155, 0, 0, 0));
+        hint.setBackgroundColor(Color.argb(165, 0, 0, 0));
         FrameLayout.LayoutParams hintParams = new FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.MATCH_PARENT,
                 FrameLayout.LayoutParams.WRAP_CONTENT
@@ -131,14 +143,15 @@ public class CustomQrCaptureActivity extends ComponentActivity {
         root.addView(hint, hintParams);
 
         setContentView(root);
-        startHighResolutionCamera();
+        startCamera();
     }
 
-    private void startHighResolutionCamera() {
+    private void startCamera() {
         ListenableFuture<ProcessCameraProvider> future = ProcessCameraProvider.getInstance(this);
         future.addListener(() -> {
             try {
                 cameraProvider = future.get();
+
                 Preview preview = new Preview.Builder()
                         .setTargetResolution(new Size(1920, 1080))
                         .build();
@@ -158,24 +171,19 @@ public class CustomQrCaptureActivity extends ComponentActivity {
                         analysis
                 );
 
-                // A modest sensor crop makes tiny QR modules larger without forcing
-                // the user extremely close, while staying safe on cameras with a low
-                // maximum zoom ratio.
-                ZoomState zoomState = activeCamera.getCameraInfo().getZoomState().getValue();
-                if (zoomState != null) {
-                    float targetZoom = Math.min(1.35f, zoomState.getMaxZoomRatio());
-                    targetZoom = Math.max(targetZoom, zoomState.getMinZoomRatio());
-                    activeCamera.getCameraControl().setZoomRatio(targetZoom);
+                ZoomState state = activeCamera.getCameraInfo().getZoomState().getValue();
+                if (state != null) {
+                    float target = Math.min(1.30f, state.getMaxZoomRatio());
+                    target = Math.max(target, state.getMinZoomRatio());
+                    activeCamera.getCameraControl().setZoomRatio(target);
                 }
 
-                // Trigger one center focus after the preview has settled. Continuous
-                // AF continues normally afterward, and the user can tap the QR area.
                 previewView.postDelayed(() -> focusAt(
                         previewView.getWidth() / 2f,
                         previewView.getHeight() / 2f
-                ), 450);
+                ), 500);
             } catch (Exception error) {
-                Toast.makeText(this, "HD QR 카메라 실행 실패: " + error.getMessage(), Toast.LENGTH_LONG).show();
+                Toast.makeText(this, "QR 카메라 실행 실패: " + error.getMessage(), Toast.LENGTH_LONG).show();
                 setResult(Activity.RESULT_CANCELED);
                 finish();
             }
@@ -193,40 +201,85 @@ public class CustomQrCaptureActivity extends ComponentActivity {
             ).setAutoCancelDuration(3, TimeUnit.SECONDS).build();
             camera.getCameraControl().startFocusAndMetering(action);
         } catch (Exception ignored) {
-            // Some camera implementations do not expose metering regions. Scanning
-            // should continue with the camera's default continuous autofocus.
+            // Keep scanning with the camera's default continuous autofocus.
         }
     }
 
+    @ExperimentalGetImage
     private void analyzeFrame(ImageProxy proxy) {
+        if (resultDelivered) {
+            proxy.close();
+            return;
+        }
+
+        long now = System.currentTimeMillis();
+        if (now - lastAnalysisMs < 140) {
+            proxy.close();
+            return;
+        }
+        lastAnalysisMs = now;
+
+        // First keep the existing ZBar route. This is deliberately synchronous and
+        // raw-first so Ssangyong/Sampyo behavior is not replaced by the new engine.
         try {
-            if (resultDelivered) return;
-            long now = System.currentTimeMillis();
-            if (now - lastAnalysisMs < 180) return;
-            lastAnalysisMs = now;
-
             GrayFrame raw = copyLuma(proxy);
-            int rotation = proxy.getImageInfo().getRotationDegrees();
-            GrayFrame upright = rotate(raw, rotation);
-
-            String result = scanTransportQr(upright);
-            if (result != null && !result.trim().isEmpty()) {
-                final String decoded = result;
+            GrayFrame upright = rotate(raw, proxy.getImageInfo().getRotationDegrees());
+            String zbar = scanWithZBar(upright);
+            if (zbar != null && !zbar.trim().isEmpty()) {
                 resultDelivered = true;
-                runOnUiThread(() -> deliverResult(decoded));
+                proxy.close();
+                runOnUiThread(() -> deliverResult(zbar, null));
+                return;
             }
         } catch (Throwable ignored) {
-            // Keep the camera alive and analyze the next frame.
-        } finally {
-            proxy.close();
+            // Fall through to ML Kit on the same camera frame.
         }
+
+        if (mlKitBusy || resultDelivered || proxy.getImage() == null) {
+            proxy.close();
+            return;
+        }
+
+        mlKitBusy = true;
+        InputImage input;
+        try {
+            input = InputImage.fromMediaImage(
+                    proxy.getImage(),
+                    proxy.getImageInfo().getRotationDegrees()
+            );
+        } catch (Throwable error) {
+            mlKitBusy = false;
+            proxy.close();
+            return;
+        }
+
+        mlKitScanner.process(input)
+                .addOnSuccessListener(analyzerExecutor, barcodes -> {
+                    if (resultDelivered || barcodes == null) return;
+                    for (Barcode barcode : barcodes) {
+                        if (barcode == null || barcode.getFormat() != Barcode.FORMAT_QR_CODE) continue;
+                        byte[] rawBytes = barcode.getRawBytes();
+                        String text = barcode.getRawValue();
+                        if (text == null || text.trim().isEmpty()) text = barcode.getDisplayValue();
+                        if ((text == null || text.trim().isEmpty()) && rawBytes != null && rawBytes.length > 0) {
+                            text = new String(rawBytes, StandardCharsets.ISO_8859_1);
+                        }
+                        if (text != null && !text.trim().isEmpty()) {
+                            final String decoded = text;
+                            final byte[] decodedBytes = rawBytes;
+                            resultDelivered = true;
+                            runOnUiThread(() -> deliverResult(decoded, decodedBytes));
+                            break;
+                        }
+                    }
+                })
+                .addOnCompleteListener(analyzerExecutor, task -> {
+                    mlKitBusy = false;
+                    proxy.close();
+                });
     }
 
-    /**
-     * Preserve the successful raw ZBar route first, then add increasingly focused
-     * crops and contrast/binarization passes for the difficult Hanil thermal QR.
-     */
-    private String scanTransportQr(GrayFrame upright) {
+    private String scanWithZBar(GrayFrame upright) {
         String result = scan(upright);
         if (result != null) return result;
 
@@ -234,40 +287,30 @@ public class CustomQrCaptureActivity extends ComponentActivity {
         result = scan(crop90);
         if (result != null) return result;
 
-        GrayFrame crop78 = centerCrop(upright, 0.78f);
-        result = scan(crop78);
+        GrayFrame crop76 = centerCrop(upright, 0.76f);
+        result = scan(crop76);
         if (result != null) return result;
 
-        GrayFrame crop66 = centerCrop(upright, 0.66f);
-        result = scan(crop66);
+        GrayFrame crop62 = centerCrop(upright, 0.62f);
+        result = scan(crop62);
         if (result != null) return result;
 
-        // Thermal paper frequently has a pale background or localized glare. These
-        // passes run only after all raw attempts, so they cannot regress normal QR.
-        GrayFrame contrast78 = stretchContrast(crop78);
-        result = scan(contrast78);
-        if (result != null) return result;
-        result = scan(otsuThreshold(contrast78));
+        GrayFrame enhanced = stretchContrast(crop76);
+        result = scan(enhanced);
         if (result != null) return result;
 
-        GrayFrame contrast66 = stretchContrast(crop66);
-        result = scan(contrast66);
-        if (result != null) return result;
-        result = scan(otsuThreshold(contrast66));
+        result = scan(otsuThreshold(enhanced));
         if (result != null) return result;
 
-        // Nearest-neighbour enlargement can help ZBar lock onto very small finder
-        // and timing modules after the QR has been isolated in the center crop.
-        return scan(scaleNearest(contrast66, 1.45f));
+        return scan(scaleNearest(stretchContrast(crop62), 1.50f));
     }
 
     private String scan(GrayFrame frame) {
-        if (frame == null || frame.width < 200 || frame.height < 200) return null;
+        if (frame == null || frame.width < 180 || frame.height < 180) return null;
         Image barcode = new Image(frame.width, frame.height, "Y800");
         barcode.setData(frame.data);
-        int found = imageScanner.scanImage(barcode);
-        if (found == 0) return null;
-        SymbolSet symbols = imageScanner.getResults();
+        if (zbarScanner.scanImage(barcode) == 0) return null;
+        SymbolSet symbols = zbarScanner.getResults();
         for (Symbol symbol : symbols) {
             String data = symbol.getData();
             if (data != null && !data.trim().isEmpty()) return data;
@@ -282,8 +325,8 @@ public class CustomQrCaptureActivity extends ComponentActivity {
         ByteBuffer buffer = plane.getBuffer().duplicate();
         int rowStride = plane.getRowStride();
         int pixelStride = plane.getPixelStride();
-        byte[] out = new byte[width * height];
         int base = buffer.position();
+        byte[] out = new byte[width * height];
 
         if (pixelStride == 1 && rowStride == width && buffer.remaining() >= out.length) {
             buffer.get(out, 0, out.length);
@@ -319,7 +362,7 @@ public class CustomQrCaptureActivity extends ComponentActivity {
             byte[] out = new byte[src.data.length];
             for (int y = 0; y < src.height; y++) {
                 for (int x = 0; x < src.width; x++) {
-                    int srcIndex = y * src.width + x;
+                    int sourceIndex = y * src.width + x;
                     int nx;
                     int ny;
                     if (d == 90) {
@@ -329,7 +372,7 @@ public class CustomQrCaptureActivity extends ComponentActivity {
                         nx = y;
                         ny = src.width - 1 - x;
                     }
-                    out[ny * nw + nx] = src.data[srcIndex];
+                    out[ny * nw + nx] = src.data[sourceIndex];
                 }
             }
             return new GrayFrame(out, nw, nh);
@@ -338,7 +381,7 @@ public class CustomQrCaptureActivity extends ComponentActivity {
     }
 
     private GrayFrame centerCrop(GrayFrame src, float fraction) {
-        int side = Math.max(200, Math.round(Math.min(src.width, src.height) * fraction));
+        int side = Math.max(180, Math.round(Math.min(src.width, src.height) * fraction));
         side = Math.min(side, Math.min(src.width, src.height));
         int left = (src.width - side) / 2;
         int top = (src.height - side) / 2;
@@ -353,7 +396,7 @@ public class CustomQrCaptureActivity extends ComponentActivity {
         int[] histogram = new int[256];
         for (byte value : src.data) histogram[value & 0xFF]++;
         int total = src.data.length;
-        int lowTarget = Math.max(1, total / 50);   // 2%
+        int lowTarget = Math.max(1, total / 50);
         int highTarget = Math.max(1, total - lowTarget);
         int cumulative = 0;
         int low = 0;
@@ -371,8 +414,8 @@ public class CustomQrCaptureActivity extends ComponentActivity {
             }
         }
         if (high - low < 24) return src;
-        byte[] out = new byte[src.data.length];
         int range = high - low;
+        byte[] out = new byte[src.data.length];
         for (int i = 0; i < src.data.length; i++) {
             int v = src.data[i] & 0xFF;
             int mapped = (v - low) * 255 / range;
@@ -392,20 +435,20 @@ public class CustomQrCaptureActivity extends ComponentActivity {
             sum += v;
         }
         int total = src.data.length;
-        int weightBackground = 0;
-        long sumBackground = 0;
+        int backgroundWeight = 0;
+        long backgroundSum = 0;
         double bestVariance = -1;
         int threshold = 127;
         for (int t = 0; t < 256; t++) {
-            weightBackground += histogram[t];
-            if (weightBackground == 0) continue;
-            int weightForeground = total - weightBackground;
-            if (weightForeground == 0) break;
-            sumBackground += (long) t * histogram[t];
-            double meanBackground = (double) sumBackground / weightBackground;
-            double meanForeground = (double) (sum - sumBackground) / weightForeground;
-            double diff = meanBackground - meanForeground;
-            double variance = (double) weightBackground * weightForeground * diff * diff;
+            backgroundWeight += histogram[t];
+            if (backgroundWeight == 0) continue;
+            int foregroundWeight = total - backgroundWeight;
+            if (foregroundWeight == 0) break;
+            backgroundSum += (long) t * histogram[t];
+            double backgroundMean = (double) backgroundSum / backgroundWeight;
+            double foregroundMean = (double) (sum - backgroundSum) / foregroundWeight;
+            double diff = backgroundMean - foregroundMean;
+            double variance = (double) backgroundWeight * foregroundWeight * diff * diff;
             if (variance > bestVariance) {
                 bestVariance = variance;
                 threshold = t;
@@ -419,27 +462,29 @@ public class CustomQrCaptureActivity extends ComponentActivity {
     }
 
     private GrayFrame scaleNearest(GrayFrame src, float scale) {
-        if (scale <= 1.01f) return src;
         int newWidth = Math.max(src.width, Math.round(src.width * scale));
         int newHeight = Math.max(src.height, Math.round(src.height * scale));
         byte[] out = new byte[newWidth * newHeight];
         for (int y = 0; y < newHeight; y++) {
             int sy = Math.min(src.height - 1, (int) (y / scale));
-            int srcRow = sy * src.width;
-            int dstRow = y * newWidth;
+            int sourceRow = sy * src.width;
+            int targetRow = y * newWidth;
             for (int x = 0; x < newWidth; x++) {
                 int sx = Math.min(src.width - 1, (int) (x / scale));
-                out[dstRow + x] = src.data[srcRow + sx];
+                out[targetRow + x] = src.data[sourceRow + sx];
             }
         }
         return new GrayFrame(out, newWidth, newHeight);
     }
 
-    private void deliverResult(String result) {
+    private void deliverResult(String result, byte[] rawBytes) {
         if (cameraProvider != null) cameraProvider.unbindAll();
         Intent data = new Intent(Intents.Scan.ACTION);
         data.putExtra(Intents.Scan.RESULT, result);
         data.putExtra(Intents.Scan.RESULT_FORMAT, "QR_CODE");
+        if (rawBytes != null && rawBytes.length > 0) {
+            data.putExtra("SCAN_RESULT_BYTES", rawBytes);
+        }
         setResult(Activity.RESULT_OK, data);
         finish();
     }
@@ -447,6 +492,7 @@ public class CustomQrCaptureActivity extends ComponentActivity {
     @Override
     protected void onDestroy() {
         if (cameraProvider != null) cameraProvider.unbindAll();
+        if (mlKitScanner != null) mlKitScanner.close();
         if (analyzerExecutor != null) analyzerExecutor.shutdownNow();
         super.onDestroy();
     }
