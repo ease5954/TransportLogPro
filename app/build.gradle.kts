@@ -10,8 +10,8 @@ android {
         applicationId = "com.transportlog.proapp"
         minSdk = 24
         targetSdk = 36
-        versionCode = 23
-        versionName = "1.6.7"
+        versionCode = 24
+        versionName = "1.6.8"
     }
 
     buildTypes {
@@ -45,8 +45,6 @@ dependencies {
     implementation("com.journeyapps:zxing-android-embedded:4.3.0")
     implementation("com.google.zxing:core:3.5.3")
     implementation("com.google.android.gms:play-services-code-scanner:16.1.0")
-    // Bundled on-device model: no first-use model download is required for the
-    // difficult Hanil/Ssangyong/Sampyo live-camera fallback scanner.
     implementation("com.google.mlkit:barcode-scanning:17.3.0")
     implementation("com.yanzhenjie.zbar:camera:1.0.0")
 }

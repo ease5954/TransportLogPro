@@ -49,10 +49,11 @@ import java.util.concurrent.TimeUnit;
 /**
  * Dual-engine high-resolution QR scanner for cement waybills.
  *
- * Engine 1: ZBar keeps the proven raw luminance path used by Ssangyong/Sampyo.
- * Engine 2: bundled ML Kit barcode scanning receives the original CameraX frame
- *           whenever ZBar does not decode it. ML Kit also exposes raw QR bytes,
- *           which lets MainActivity restore Hanil's CP949 payload reliably.
+ * 1.6.8 preserves the original decoded QR bytes when ZBar succeeds. Hanil's
+ * CB0010 payload is CP949/MS949 and loses Korean characters if only ZBar's
+ * already-decoded Java String is returned. Passing the raw bytes lets
+ * MainActivity perform the existing MS949 restoration before JavaScript parses
+ * individual fields.
  */
 public class CustomQrCaptureActivity extends ComponentActivity {
     private PreviewView previewView;
@@ -113,7 +114,7 @@ public class CustomQrCaptureActivity extends ComponentActivity {
         root.addView(guide, guideParams);
 
         TextView title = new TextView(this);
-        title.setText("운송 QR 정밀 스캔 1.6.7\nZBar + ML Kit 이중 판독");
+        title.setText("운송 QR 정밀 스캔 1.6.8\n원본 바이트 + 이중 판독");
         title.setTextColor(Color.WHITE);
         title.setTextSize(18);
         title.setGravity(Gravity.CENTER);
@@ -219,17 +220,24 @@ public class CustomQrCaptureActivity extends ComponentActivity {
         }
         lastAnalysisMs = now;
 
-        // First keep the existing ZBar route. This is deliberately synchronous and
-        // raw-first so Ssangyong/Sampyo behavior is not replaced by the new engine.
+        // Keep the proven ZBar route first. Unlike 1.6.7, retain the original QR
+        // bytes so Hanil CP949 text can be reconstructed instead of keeping mojibake.
         try {
             GrayFrame raw = copyLuma(proxy);
             GrayFrame upright = rotate(raw, proxy.getImageInfo().getRotationDegrees());
-            String zbar = scanWithZBar(upright);
-            if (zbar != null && !zbar.trim().isEmpty()) {
-                resultDelivered = true;
-                proxy.close();
-                runOnUiThread(() -> deliverResult(zbar, null));
-                return;
+            DecodedQr zbar = scanWithZBar(upright);
+            if (zbar != null && zbar.text != null && !zbar.text.trim().isEmpty()) {
+                // If this is Hanil but this ZBar wrapper did not expose raw bytes,
+                // do not immediately return its mojibake String. Give ML Kit the
+                // same frame a chance to provide raw bytes first.
+                if (zbar.rawBytes != null || !looksLikeHanil(zbar.text)) {
+                    resultDelivered = true;
+                    proxy.close();
+                    final String decoded = zbar.text;
+                    final byte[] decodedBytes = zbar.rawBytes;
+                    runOnUiThread(() -> deliverResult(decoded, decodedBytes));
+                    return;
+                }
             }
         } catch (Throwable ignored) {
             // Fall through to ML Kit on the same camera frame.
@@ -279,8 +287,12 @@ public class CustomQrCaptureActivity extends ComponentActivity {
                 });
     }
 
-    private String scanWithZBar(GrayFrame upright) {
-        String result = scan(upright);
+    private boolean looksLikeHanil(String text) {
+        return text != null && text.contains("CB0010@");
+    }
+
+    private DecodedQr scanWithZBar(GrayFrame upright) {
+        DecodedQr result = scan(upright);
         if (result != null) return result;
 
         GrayFrame crop90 = centerCrop(upright, 0.90f);
@@ -305,7 +317,7 @@ public class CustomQrCaptureActivity extends ComponentActivity {
         return scan(scaleNearest(stretchContrast(crop62), 1.50f));
     }
 
-    private String scan(GrayFrame frame) {
+    private DecodedQr scan(GrayFrame frame) {
         if (frame == null || frame.width < 180 || frame.height < 180) return null;
         Image barcode = new Image(frame.width, frame.height, "Y800");
         barcode.setData(frame.data);
@@ -313,7 +325,27 @@ public class CustomQrCaptureActivity extends ComponentActivity {
         SymbolSet symbols = zbarScanner.getResults();
         for (Symbol symbol : symbols) {
             String data = symbol.getData();
-            if (data != null && !data.trim().isEmpty()) return data;
+            if (data == null || data.trim().isEmpty()) continue;
+            return new DecodedQr(data, extractZbarRawBytes(symbol));
+        }
+        return null;
+    }
+
+    /**
+     * Some ZBar Android wrappers expose Symbol#getDataBytes(), while older forks
+     * expose only getData(). Reflection keeps this build compatible with both.
+     */
+    private byte[] extractZbarRawBytes(Symbol symbol) {
+        if (symbol == null) return null;
+        try {
+            java.lang.reflect.Method method = symbol.getClass().getMethod("getDataBytes");
+            Object value = method.invoke(symbol);
+            if (value instanceof byte[]) {
+                byte[] bytes = (byte[]) value;
+                return bytes.length == 0 ? null : bytes;
+            }
+        } catch (Throwable ignored) {
+            // ML Kit will be attempted for Hanil when raw bytes are unavailable.
         }
         return null;
     }
@@ -483,7 +515,7 @@ public class CustomQrCaptureActivity extends ComponentActivity {
         data.putExtra(Intents.Scan.RESULT, result);
         data.putExtra(Intents.Scan.RESULT_FORMAT, "QR_CODE");
         if (rawBytes != null && rawBytes.length > 0) {
-            data.putExtra("SCAN_RESULT_BYTES", rawBytes);
+            data.putExtra(Intents.Scan.RESULT_BYTES, rawBytes);
         }
         setResult(Activity.RESULT_OK, data);
         finish();
@@ -499,6 +531,16 @@ public class CustomQrCaptureActivity extends ComponentActivity {
 
     private int dp(int value) {
         return Math.round(value * getResources().getDisplayMetrics().density);
+    }
+
+    private static final class DecodedQr {
+        final String text;
+        final byte[] rawBytes;
+
+        DecodedQr(String text, byte[] rawBytes) {
+            this.text = text;
+            this.rawBytes = rawBytes;
+        }
     }
 
     private static final class GrayFrame {
