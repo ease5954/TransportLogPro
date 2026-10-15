@@ -40,7 +40,9 @@ import com.yanzhenjie.zbar.ImageScanner;
 import com.yanzhenjie.zbar.Symbol;
 import com.yanzhenjie.zbar.SymbolSet;
 
+import java.io.ByteArrayOutputStream;
 import java.nio.ByteBuffer;
+import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -49,11 +51,13 @@ import java.util.concurrent.TimeUnit;
 /**
  * Dual-engine high-resolution QR scanner for cement waybills.
  *
- * 1.6.8 preserves the original decoded QR bytes when ZBar succeeds. Hanil's
- * CB0010 payload is CP949/MS949 and loses Korean characters if only ZBar's
- * already-decoded Java String is returned. Passing the raw bytes lets
- * MainActivity perform the existing MS949 restoration before JavaScript parses
- * individual fields.
+ * 1.7.0 fixes Hanil Yeongwol CP949 handling at the scanner boundary. ZBar can
+ * expose the real CP949 bytes as a Latin-1/Shift-JIS-looking Java String, while
+ * getDataBytes() in this Android wrapper may represent that Java String again
+ * instead of the original QR bytes. Passing those bytes downstream and decoding
+ * them as MS949 produces valid-looking but wrong Hangul. Hanil is now repaired
+ * field-by-field before it leaves this activity and only a structurally plausible
+ * repaired payload is delivered. Ssangyong/Sampyo keep the previous raw-first path.
  */
 public class CustomQrCaptureActivity extends ComponentActivity {
     private PreviewView previewView;
@@ -114,7 +118,7 @@ public class CustomQrCaptureActivity extends ComponentActivity {
         root.addView(guide, guideParams);
 
         TextView title = new TextView(this);
-        title.setText("운송 QR 정밀 스캔 1.6.8\n원본 바이트 + 이중 판독");
+        title.setText("운송 QR 정밀 스캔 1.7.0\n한일 CP949 필드 복원 + 이중 판독");
         title.setTextColor(Color.WHITE);
         title.setTextSize(18);
         title.setGravity(Gravity.CENTER);
@@ -220,17 +224,27 @@ public class CustomQrCaptureActivity extends ComponentActivity {
         }
         lastAnalysisMs = now;
 
-        // Keep the proven ZBar route first. Unlike 1.6.7, retain the original QR
-        // bytes so Hanil CP949 text can be reconstructed instead of keeping mojibake.
+        // Keep ZBar first because it is already proven on the thermal-printed
+        // Ssangyong/Sampyo slips. Hanil is repaired from ZBar's Java String before
+        // any raw bytes are allowed to reach MainActivity.
         try {
             GrayFrame raw = copyLuma(proxy);
             GrayFrame upright = rotate(raw, proxy.getImageInfo().getRotationDegrees());
             DecodedQr zbar = scanWithZBar(upright);
             if (zbar != null && zbar.text != null && !zbar.text.trim().isEmpty()) {
-                // If this is Hanil but this ZBar wrapper did not expose raw bytes,
-                // do not immediately return its mojibake String. Give ML Kit the
-                // same frame a chance to provide raw bytes first.
-                if (zbar.rawBytes != null || !looksLikeHanil(zbar.text)) {
+                if (looksLikeHanil(zbar.text)) {
+                    String repaired = repairHanilText(zbar.text);
+                    if (isPlausibleHanil(repaired)) {
+                        resultDelivered = true;
+                        proxy.close();
+                        final String decoded = repaired;
+                        runOnUiThread(() -> deliverResult(decoded, null));
+                        return;
+                    }
+                    // Do not pass ZBar getDataBytes() for Hanil. On this wrapper it
+                    // can be UTF-8 bytes of the already-decoded mojibake String.
+                    // Let ML Kit inspect the same frame only if text repair failed.
+                } else {
                     resultDelivered = true;
                     proxy.close();
                     final String decoded = zbar.text;
@@ -272,13 +286,39 @@ public class CustomQrCaptureActivity extends ComponentActivity {
                         if ((text == null || text.trim().isEmpty()) && rawBytes != null && rawBytes.length > 0) {
                             text = new String(rawBytes, StandardCharsets.ISO_8859_1);
                         }
-                        if (text != null && !text.trim().isEmpty()) {
-                            final String decoded = text;
-                            final byte[] decodedBytes = rawBytes;
-                            resultDelivered = true;
-                            runOnUiThread(() -> deliverResult(decoded, decodedBytes));
-                            break;
+                        if (text == null || text.trim().isEmpty()) continue;
+
+                        if (looksLikeHanil(text)) {
+                            String repaired = repairHanilText(text);
+                            if (!isPlausibleHanil(repaired) && rawBytes != null && rawBytes.length > 0) {
+                                try {
+                                    String cp949 = new String(rawBytes, Charset.forName("MS949"));
+                                    String candidate = repairHanilText(cp949);
+                                    if (isPlausibleHanil(candidate)) repaired = candidate;
+                                } catch (Exception ignored) { }
+                            }
+                            if (!isPlausibleHanil(repaired) && rawBytes != null && rawBytes.length > 0) {
+                                try {
+                                    String latin1 = new String(rawBytes, StandardCharsets.ISO_8859_1);
+                                    String candidate = repairHanilText(latin1);
+                                    if (isPlausibleHanil(candidate)) repaired = candidate;
+                                } catch (Exception ignored) { }
+                            }
+                            if (isPlausibleHanil(repaired)) {
+                                final String decoded = repaired;
+                                resultDelivered = true;
+                                runOnUiThread(() -> deliverResult(decoded, null));
+                                break;
+                            }
+                            // Ignore an implausible Hanil decode and keep scanning.
+                            continue;
                         }
+
+                        final String decoded = text;
+                        final byte[] decodedBytes = rawBytes;
+                        resultDelivered = true;
+                        runOnUiThread(() -> deliverResult(decoded, decodedBytes));
+                        break;
                     }
                 })
                 .addOnCompleteListener(analyzerExecutor, task -> {
@@ -289,6 +329,80 @@ public class CustomQrCaptureActivity extends ComponentActivity {
 
     private boolean looksLikeHanil(String text) {
         return text != null && text.contains("CB0010@");
+    }
+
+    private String repairHanilText(String text) {
+        if (text == null) return null;
+        int header = text.indexOf("CB0010@");
+        if (header < 0) return text;
+
+        String payload = text.substring(header);
+        String[] fields = payload.split("@", -1);
+        for (int i = 0; i < fields.length; i++) {
+            fields[i] = repairCp949Field(fields[i]);
+        }
+        return String.join("@", fields);
+    }
+
+    private String repairCp949Field(String value) {
+        if (value == null || value.isEmpty()) return value;
+        String original = value;
+
+        // Already-correct Korean must never be re-decoded.
+        if (hangulCount(original) > 0 && original.indexOf('\uFFFD') < 0) return original;
+
+        try {
+            ByteArrayOutputStream bytes = new ByteArrayOutputStream();
+            Charset shiftJis = Charset.forName("Shift_JIS");
+            for (int i = 0; i < original.length(); i++) {
+                char c = original.charAt(i);
+                if (c <= 0x00FF) {
+                    bytes.write((byte) c);
+                } else if (c >= 0xFF61 && c <= 0xFF9F) {
+                    byte[] one = String.valueOf(c).getBytes(shiftJis);
+                    if (one.length != 1) return original;
+                    bytes.write(one[0]);
+                } else {
+                    return original;
+                }
+            }
+            String restored = new String(bytes.toByteArray(), Charset.forName("MS949"));
+            if (restored.indexOf('\uFFFD') < 0 && hangulCount(restored) > hangulCount(original)) {
+                return restored;
+            }
+        } catch (Exception ignored) { }
+        return original;
+    }
+
+    private int hangulCount(String value) {
+        if (value == null) return 0;
+        int count = 0;
+        for (int i = 0; i < value.length(); i++) {
+            char c = value.charAt(i);
+            if (c >= 0xAC00 && c <= 0xD7A3) count++;
+        }
+        return count;
+    }
+
+    private boolean isPlausibleHanil(String text) {
+        if (text == null || !text.startsWith("CB0010@")) return false;
+        String[] fields = text.split("@", -1);
+        boolean hasDate = false;
+        boolean hasWeight = false;
+        boolean hasYeongwol = false;
+        boolean hasVehicle = false;
+
+        for (String field : fields) {
+            String v = field == null ? "" : field.trim();
+            if (v.matches("\\d{8}")) hasDate = true;
+            if (v.contains("한일영월") || v.contains("한일시멘트") || v.contains("영월")) hasYeongwol = true;
+            if (v.matches(".*[가-힣]{1,3}\\d{2,3}[가-힣]\\d{4}.*")) hasVehicle = true;
+            try {
+                double n = Double.parseDouble(v.replace(",", ""));
+                if (n >= 10.0 && n <= 80.0) hasWeight = true;
+            } catch (Exception ignored) { }
+        }
+        return hasDate && hasWeight && hasYeongwol && hasVehicle;
     }
 
     private DecodedQr scanWithZBar(GrayFrame upright) {
@@ -345,7 +459,7 @@ public class CustomQrCaptureActivity extends ComponentActivity {
                 return bytes.length == 0 ? null : bytes;
             }
         } catch (Throwable ignored) {
-            // ML Kit will be attempted for Hanil when raw bytes are unavailable.
+            // Hanil never trusts these bytes directly; non-Hanil keeps compatibility.
         }
         return null;
     }
