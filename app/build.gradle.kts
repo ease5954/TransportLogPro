@@ -10,15 +10,17 @@ android {
         applicationId = "com.transportlog.proapp"
         minSdk = 24
         targetSdk = 36
-        versionCode = 24
-        versionName = "1.6.8"
+        versionCode = 25
+        versionName = "1.6.9"
     }
 
     buildTypes {
-        // Separate test package so the existing app and its data stay untouched.
+        // Use a brand-new package ID for this test build so Android installs it
+        // as a separate app even when older Hanil test APKs were signed by a
+        // different temporary GitHub Actions debug key.
         debug {
-            applicationIdSuffix = ".hanilhd"
-            versionNameSuffix = "-hanil-hd"
+            applicationIdSuffix = ".hanilqr169"
+            versionNameSuffix = "-easy-install"
         }
         release {
             isMinifyEnabled = false
