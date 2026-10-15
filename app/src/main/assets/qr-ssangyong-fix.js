@@ -1,6 +1,6 @@
 // Cement-waybill compatibility layer.
-// Keeps Sampyo/base parsing untouched, preserves Ssangyong fallback,
-// and repairs Hanil/Ssangyong fields one-by-one when CP949 text is mixed/garbled.
+// Keeps Sampyo/base parsing untouched and adds structural fallbacks for
+// Hanil Yeongwol, Ssangyong Northpyeong, and Halla Cement port waybills.
 (function(root){
   'use strict';
 
@@ -20,7 +20,6 @@
       for(const ch of original){
         const code=ch.charCodeAt(0);
         if(code<=255){bytes.push(code);continue;}
-        // Half-width Katakana can appear when arbitrary QR bytes are first exposed as Shift-JIS text.
         if(code>=0xFF61&&code<=0xFF9F){bytes.push(0xA1+(code-0xFF61));continue;}
         return original;
       }
@@ -32,7 +31,7 @@
 
   function formatDate(v){
     if(typeof root.formatQrSlipDate==='function')return root.formatQrSlipDate(v);
-    const s=String(v||'');
+    const s=String(v||'').replace(/\D/g,'');
     return /^\d{8}$/.test(s)?`${s.slice(0,4)}. ${Number(s.slice(4,6))}. ${Number(s.slice(6,8))}.`:'';
   }
 
@@ -70,8 +69,6 @@
 
   function ssangyong(text){
     const raw=clean(text);
-    // Northpyeong currently arrives as mixed CP949/Shift-JIS-looking text.
-    // Repair every field first so vehicle/loading/customer can be trusted too.
     const q=raw.split('@').map(decodeField);
     if(q.length<8)return null;
     const dateIndex=q.findIndex(v=>/^\d{8}$/.test(v));
@@ -104,6 +101,65 @@
     };
   }
 
+  function labelValue(text,labels){
+    const escaped=labels.map(x=>x.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')).join('|');
+    const re=new RegExp('(?:'+escaped+')\\s*[:=]?\\s*([^@|;\\n\\r]+)','i');
+    const m=String(text||'').match(re);
+    return m?clean(m[1]):'';
+  }
+
+  function pickNetWeight(text){
+    const direct=String(text||'').match(/(?:실중량|순중량|NET(?:\s*WEIGHT)?)\s*[:=]?\s*(\d{1,2}(?:\.\d{1,3})?)/i);
+    if(direct){const n=Number(direct[1]);if(n>=10&&n<=80)return n;}
+    const nums=(String(text||'').match(/\b\d{1,2}\.\d{1,3}\b/g)||[])
+      .map(Number).filter(n=>Number.isFinite(n)&&n>=10&&n<=80);
+    for(let i=0;i<nums.length;i++)for(let j=0;j<nums.length;j++){
+      if(i===j)continue;
+      const diff=Math.abs(nums[i]-nums[j]);
+      for(let k=0;k<nums.length;k++){
+        if(k===i||k===j)continue;
+        if(nums[k]>=15&&nums[k]<=45&&Math.abs(diff-nums[k])<=0.08)return nums[k];
+      }
+    }
+    const likely=nums.filter(n=>n>=20&&n<=35);
+    if(likely.length)return likely[likely.length-1];
+    return nums.length?nums[nums.length-1]:0;
+  }
+
+  function halla(text){
+    const raw=clean(text);
+    if(!raw)return null;
+    const repaired=raw.split(/(@|\||;|\n|\r)/).map(part=>/^(?:@|\||;|\n|\r)$/.test(part)?part:decodeField(part)).join('');
+    if(/CB0010@/i.test(repaired)||/\bBK\b/i.test(repaired))return null;
+
+    const vehicle=(repaired.match(/[가-힣]{1,2}\d{2,3}[가-힣]\d{4}/)||[])[0]||'';
+    const dateMatch=(repaired.match(/20\d{2}[-./]?\d{2}[-./]?\d{2}/)||[])[0]||'';
+    const dateDigits=dateMatch.replace(/\D/g,'');
+    const weight=pickNetWeight(repaired);
+    const explicitHalla=/(?:한라시멘트|HALLA\s*CEMENT|HALLA)|(?:P\s*\/?\s*C\s*BULK)|(?:포틀랜드\s*시멘트\s*1종)/i.test(repaired);
+    const slipCandidates=(repaired.match(/\b\d{9,12}\b/g)||[]).filter(v=>v!==dateDigits);
+    const slip=(labelValue(repaired,['반출증 No','반출증번호','반출증','전표번호','출하번호']).match(/\d{6,14}/)||[])[0]||slipCandidates[0]||'';
+    const structural=Boolean(vehicle&&dateDigits&&weight&&slip);
+    if(!explicitHalla&&!structural)return null;
+
+    const customer=labelValue(repaired,['거래처명','거래처','판매처','고객사'])||
+      ((repaired.match(/[^@|;\n\r]{0,20}(?:미래해운|[가-힣A-Za-z0-9]+\s*(?:주식회사|\(주\)))[^@|;\n\r]{0,20}/)||[])[0]||'');
+    const carrier=labelValue(repaired,['운송업체','운송사명','운송사'])||(/미래해운/.test(repaired)?'미래해운(주)':'');
+    const unloading=labelValue(repaired,['하차지','도착지','납품처','현장명']);
+    const driver=labelValue(repaired,['기사성명','기사명','운전기사','기사']);
+    const timeMatch=(repaired.match(/(?:^|[^\d])([01]\d|2[0-3])[:]?([0-5]\d)(?!\d)/)||[]);
+    const time=timeMatch.length>=3?timeMatch[1]+timeMatch[2]:'';
+
+    return {
+      valid:true,type:'halla-port',company:'한라시멘트',slip,
+      carrier,vehicle,weight,
+      loading:'한라시멘트 항만공장',aggregate:'한라시멘트 항만공장',
+      date:formatDate(dateDigits),time,
+      customer:clean(customer),item:'포틀랜드시멘트(1종)',unloading:clean(unloading),driver:clean(driver),
+      customerComplete:Boolean(clean(customer)),destinationComplete:Boolean(clean(unloading)),raw:repaired
+    };
+  }
+
   root.parseTransportQR=function(text){
     const raw=clean(text);
     if(raw.startsWith('CB0010@')){
@@ -113,12 +169,12 @@
     let result=null;
     try{result=baseParse(text);}catch(e){}
     if(result&&result.valid)return result;
-    return ssangyong(text)||hanil(text)||result||{valid:false,reason:'운송정보 항목이 없는 QR입니다.',raw:String(text||'')};
+    return ssangyong(text)||hanil(text)||halla(text)||result||{valid:false,reason:'운송정보 항목이 없는 QR입니다.',raw:String(text||'')};
   };
 
   root.chooseQrItem=function(q,c){
-    if(!q||!['hanil-at','ssangyong-at'].includes(q.type))return baseChoose(q,c);
-    if(q.type==='hanil-at')q.item='포틀랜드시멘트(1종)';
+    if(!q||!['hanil-at','ssangyong-at','halla-port'].includes(q.type))return baseChoose(q,c);
+    if(q.type==='hanil-at'||q.type==='halla-port')q.item='포틀랜드시멘트(1종)';
     if(q.type==='ssangyong-at'&&!q.item)q.item='3종 BK';
 
     const rates=c&&c.rates||[];
@@ -137,7 +193,8 @@
       root.save('clients',root.clients||clients);
       root.renderRates(c);
       root.chooseRate(q.item,0);
-      root.showQrStatus((q.type==='hanil-at'?'한일 영월':'쌍용 북평')+' QR 인식 완료 · '+q.item+' 등록 · 단가만 확인해주세요');
+      const name=q.type==='hanil-at'?'한일 영월':q.type==='ssangyong-at'?'쌍용 북평':'한라 항만';
+      root.showQrStatus(name+' QR 인식 완료 · '+q.item+' 등록 · 단가만 확인해주세요');
       return;
     }
     return baseChoose(q,c);
@@ -146,4 +203,5 @@
   root.__decodeHanilMojibakeField=decodeField;
   root.__hanilStructuralQR=hanil;
   root.__ssangyongStructuralQR=ssangyong;
+  root.__hallaStructuralQR=halla;
 })(window);
