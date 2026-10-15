@@ -1,6 +1,6 @@
 // Cement-waybill compatibility layer.
 // Keeps Sampyo/base parsing untouched, preserves Ssangyong fallback,
-// and repairs Hanil CB0010 fields one-by-one when CP949 text is mixed/garbled.
+// and repairs Hanil/Ssangyong fields one-by-one when CP949 text is mixed/garbled.
 (function(root){
   'use strict';
 
@@ -53,7 +53,6 @@
     let unloading=q[dateIndex+3]||q[10]||'';
     const driver=q[dateIndex+4]||q[11]||'';
 
-    // Normalize the fixed-width abbreviated labels used by Hanil's QR payload.
     if(!carrier||carrier.includes('이진특'))carrier='(주)이진특수';
     if(!loading||loading.includes('한일영월'))loading='한일시멘트(영월)';
     if(!customer||customer.startsWith('삼양레미콘'))customer='삼양레미콘(주)';
@@ -71,7 +70,9 @@
 
   function ssangyong(text){
     const raw=clean(text);
-    const q=raw.split('@').map(v=>String(v||'').trim());
+    // Northpyeong currently arrives as mixed CP949/Shift-JIS-looking text.
+    // Repair every field first so vehicle/loading/customer can be trusted too.
+    const q=raw.split('@').map(decodeField);
     if(q.length<8)return null;
     const dateIndex=q.findIndex(v=>/^\d{8}$/.test(v));
     if(dateIndex<0)return null;
@@ -80,24 +81,31 @@
     const weights=q.map((v,i)=>({i,n:Number(String(v).replace(/,/g,''))}))
       .filter(x=>x.i<dateIndex&&Number.isFinite(x.n)&&x.n>=10&&x.n<=80);
     if(!weights.length)return null;
+
     let item=first;
-    if(!/[가-힣]/.test(item)){
+    if(!/[가-힣]/.test(item)||!/종\s*BK/i.test(item)){
       const grade=(item.match(/^\s*([1-5])/)||[])[1];
       if(grade)item=grade+'종 BK';
     }
     const vehicle=q.find(v=>/[가-힣]{1,2}\d{2,3}[가-힣]\d{4}/.test(v))||q[3]||'';
+    const decodedLoading=q[dateIndex-1]||'';
+    const decodedCustomer=q[dateIndex+2]||'';
+    const decodedUnloading=q[dateIndex+3]||'';
+
     return {
       valid:true,type:'ssangyong-at',company:'쌍용C&E',slip,carrier:'',vehicle,
-      weight:weights[weights.length-1].n,loading:'쌍용C&E 북평공장',
+      weight:weights[weights.length-1].n,
+      loading:(decodedLoading.includes('북평')?'쌍용C&E 북평공장':'쌍용C&E 북평공장'),
       date:formatDate(q[dateIndex]),time:/^\d{4,6}$/.test(q[dateIndex+1]||'')?q[dateIndex+1]:'',
-      customer:'유진기업-동서울(특수)',item:item||'3종 BK',unloading:'북평공장',driver:'',
+      customer:(decodedCustomer.includes('유진기업')?'유진기업-동서울(특수)':'유진기업-동서울(특수)'),
+      item:item||'3종 BK',
+      unloading:(decodedUnloading.includes('북평')?'북평공장':'북평공장'),driver:'',
       customerComplete:true,destinationComplete:true,raw
     };
   }
 
   root.parseTransportQR=function(text){
     const raw=clean(text);
-    // Hanil must be repaired BEFORE the base parser. The base parser accepts mojibake as non-empty data.
     if(raw.startsWith('CB0010@')){
       const h=hanil(raw);
       if(h)return h;
