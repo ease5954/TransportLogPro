@@ -10,15 +10,13 @@ android {
         applicationId = "com.transportlog.proapp"
         minSdk = 24
         targetSdk = 36
-        versionCode = 26
-        versionName = "1.7.0"
+        versionCode = 27
+        versionName = "1.7.1"
     }
 
     buildTypes {
-        // New package ID for the 1.7.0 test build so it installs beside 1.6.9
-        // and cannot collide with older GitHub Actions debug signatures.
         debug {
-            applicationIdSuffix = ".hanilqr170"
+            applicationIdSuffix = ".bukpyeong171"
             versionNameSuffix = "-easy-install"
         }
         release {

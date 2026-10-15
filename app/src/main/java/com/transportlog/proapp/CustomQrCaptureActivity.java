@@ -49,15 +49,12 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 
 /**
- * Dual-engine high-resolution QR scanner for cement waybills.
+ * High-resolution transport QR scanner.
  *
- * 1.7.0 fixes Hanil Yeongwol CP949 handling at the scanner boundary. ZBar can
- * expose the real CP949 bytes as a Latin-1/Shift-JIS-looking Java String, while
- * getDataBytes() in this Android wrapper may represent that Java String again
- * instead of the original QR bytes. Passing those bytes downstream and decoding
- * them as MS949 produces valid-looking but wrong Hangul. Hanil is now repaired
- * field-by-field before it leaves this activity and only a structurally plausible
- * repaired payload is delivered. Ssangyong/Sampyo keep the previous raw-first path.
+ * 1.7.1 keeps the working Hanil/Sampyo paths and adds late-stage passes aimed at
+ * Ssangyong C&E Northpyeong's very small, dense thermal-print QR: tighter centre
+ * crops, contrast stretching, Otsu binarisation and 2x nearest-neighbour scaling.
+ * Raw passes are always attempted first so already-working slips are unchanged.
  */
 public class CustomQrCaptureActivity extends ComponentActivity {
     private PreviewView previewView;
@@ -109,8 +106,6 @@ public class CustomQrCaptureActivity extends ComponentActivity {
         border.setStroke(dp(4), Color.rgb(33, 196, 107));
         border.setCornerRadius(dp(18));
         guide.setBackground(border);
-        guide.setClickable(false);
-        guide.setFocusable(false);
         int screenWidth = getResources().getDisplayMetrics().widthPixels;
         int guideSize = Math.min(dp(350), screenWidth - dp(20));
         FrameLayout.LayoutParams guideParams = new FrameLayout.LayoutParams(guideSize, guideSize);
@@ -118,7 +113,7 @@ public class CustomQrCaptureActivity extends ComponentActivity {
         root.addView(guide, guideParams);
 
         TextView title = new TextView(this);
-        title.setText("운송 QR 정밀 스캔 1.7.0\n한일 CP949 필드 복원 + 이중 판독");
+        title.setText("운송 QR 정밀 스캔 1.7.1\n한일 · 쌍용 북평 고밀도 QR 강화");
         title.setTextColor(Color.WHITE);
         title.setTextSize(18);
         title.setGravity(Gravity.CENTER);
@@ -133,7 +128,7 @@ public class CustomQrCaptureActivity extends ComponentActivity {
         root.addView(title, titleParams);
 
         TextView hint = new TextView(this);
-        hint.setText("QR 네 모서리를 사각형 안에 넣고 15~25cm에서 고정하세요\n흐리면 QR 가운데를 한 번 터치하세요");
+        hint.setText("북평 QR은 사각형 중앙에 크게 맞추고 10~20cm에서 고정하세요\n흐리면 QR 가운데를 한 번 터치하세요");
         hint.setTextColor(Color.WHITE);
         hint.setTextSize(15);
         hint.setGravity(Gravity.CENTER);
@@ -178,7 +173,7 @@ public class CustomQrCaptureActivity extends ComponentActivity {
 
                 ZoomState state = activeCamera.getCameraInfo().getZoomState().getValue();
                 if (state != null) {
-                    float target = Math.min(1.30f, state.getMaxZoomRatio());
+                    float target = Math.min(1.40f, state.getMaxZoomRatio());
                     target = Math.max(target, state.getMinZoomRatio());
                     activeCamera.getCameraControl().setZoomRatio(target);
                 }
@@ -186,7 +181,7 @@ public class CustomQrCaptureActivity extends ComponentActivity {
                 previewView.postDelayed(() -> focusAt(
                         previewView.getWidth() / 2f,
                         previewView.getHeight() / 2f
-                ), 500);
+                ), 450);
             } catch (Exception error) {
                 Toast.makeText(this, "QR 카메라 실행 실패: " + error.getMessage(), Toast.LENGTH_LONG).show();
                 setResult(Activity.RESULT_CANCELED);
@@ -205,9 +200,7 @@ public class CustomQrCaptureActivity extends ComponentActivity {
                     FocusMeteringAction.FLAG_AF | FocusMeteringAction.FLAG_AE
             ).setAutoCancelDuration(3, TimeUnit.SECONDS).build();
             camera.getCameraControl().startFocusAndMetering(action);
-        } catch (Exception ignored) {
-            // Keep scanning with the camera's default continuous autofocus.
-        }
+        } catch (Exception ignored) { }
     }
 
     @ExperimentalGetImage
@@ -216,17 +209,13 @@ public class CustomQrCaptureActivity extends ComponentActivity {
             proxy.close();
             return;
         }
-
         long now = System.currentTimeMillis();
-        if (now - lastAnalysisMs < 140) {
+        if (now - lastAnalysisMs < 170) {
             proxy.close();
             return;
         }
         lastAnalysisMs = now;
 
-        // Keep ZBar first because it is already proven on the thermal-printed
-        // Ssangyong/Sampyo slips. Hanil is repaired from ZBar's Java String before
-        // any raw bytes are allowed to reach MainActivity.
         try {
             GrayFrame raw = copyLuma(proxy);
             GrayFrame upright = rotate(raw, proxy.getImageInfo().getRotationDegrees());
@@ -237,25 +226,19 @@ public class CustomQrCaptureActivity extends ComponentActivity {
                     if (isPlausibleHanil(repaired)) {
                         resultDelivered = true;
                         proxy.close();
-                        final String decoded = repaired;
-                        runOnUiThread(() -> deliverResult(decoded, null));
+                        runOnUiThread(() -> deliverResult(repaired, null));
                         return;
                     }
-                    // Do not pass ZBar getDataBytes() for Hanil. On this wrapper it
-                    // can be UTF-8 bytes of the already-decoded mojibake String.
-                    // Let ML Kit inspect the same frame only if text repair failed.
                 } else {
                     resultDelivered = true;
                     proxy.close();
                     final String decoded = zbar.text;
-                    final byte[] decodedBytes = zbar.rawBytes;
-                    runOnUiThread(() -> deliverResult(decoded, decodedBytes));
+                    final byte[] bytes = zbar.rawBytes;
+                    runOnUiThread(() -> deliverResult(decoded, bytes));
                     return;
                 }
             }
-        } catch (Throwable ignored) {
-            // Fall through to ML Kit on the same camera frame.
-        }
+        } catch (Throwable ignored) { }
 
         if (mlKitBusy || resultDelivered || proxy.getImage() == null) {
             proxy.close();
@@ -265,10 +248,7 @@ public class CustomQrCaptureActivity extends ComponentActivity {
         mlKitBusy = true;
         InputImage input;
         try {
-            input = InputImage.fromMediaImage(
-                    proxy.getImage(),
-                    proxy.getImageInfo().getRotationDegrees()
-            );
+            input = InputImage.fromMediaImage(proxy.getImage(), proxy.getImageInfo().getRotationDegrees());
         } catch (Throwable error) {
             mlKitBusy = false;
             proxy.close();
@@ -292,15 +272,7 @@ public class CustomQrCaptureActivity extends ComponentActivity {
                             String repaired = repairHanilText(text);
                             if (!isPlausibleHanil(repaired) && rawBytes != null && rawBytes.length > 0) {
                                 try {
-                                    String cp949 = new String(rawBytes, Charset.forName("MS949"));
-                                    String candidate = repairHanilText(cp949);
-                                    if (isPlausibleHanil(candidate)) repaired = candidate;
-                                } catch (Exception ignored) { }
-                            }
-                            if (!isPlausibleHanil(repaired) && rawBytes != null && rawBytes.length > 0) {
-                                try {
-                                    String latin1 = new String(rawBytes, StandardCharsets.ISO_8859_1);
-                                    String candidate = repairHanilText(latin1);
+                                    String candidate = repairHanilText(new String(rawBytes, Charset.forName("MS949")));
                                     if (isPlausibleHanil(candidate)) repaired = candidate;
                                 } catch (Exception ignored) { }
                             }
@@ -310,14 +282,13 @@ public class CustomQrCaptureActivity extends ComponentActivity {
                                 runOnUiThread(() -> deliverResult(decoded, null));
                                 break;
                             }
-                            // Ignore an implausible Hanil decode and keep scanning.
                             continue;
                         }
 
                         final String decoded = text;
-                        final byte[] decodedBytes = rawBytes;
+                        final byte[] bytes = rawBytes;
                         resultDelivered = true;
-                        runOnUiThread(() -> deliverResult(decoded, decodedBytes));
+                        runOnUiThread(() -> deliverResult(decoded, bytes));
                         break;
                     }
                 })
@@ -335,48 +306,38 @@ public class CustomQrCaptureActivity extends ComponentActivity {
         if (text == null) return null;
         int header = text.indexOf("CB0010@");
         if (header < 0) return text;
-
-        String payload = text.substring(header);
-        String[] fields = payload.split("@", -1);
-        for (int i = 0; i < fields.length; i++) {
-            fields[i] = repairCp949Field(fields[i]);
-        }
+        String[] fields = text.substring(header).split("@", -1);
+        for (int i = 0; i < fields.length; i++) fields[i] = repairCp949Field(fields[i]);
         return String.join("@", fields);
     }
 
     private String repairCp949Field(String value) {
         if (value == null || value.isEmpty()) return value;
-        String original = value;
-
-        // Already-correct Korean must never be re-decoded.
-        if (hangulCount(original) > 0 && original.indexOf('\uFFFD') < 0) return original;
-
+        if (hangulCount(value) > 0 && value.indexOf('\uFFFD') < 0) return value;
         try {
             ByteArrayOutputStream bytes = new ByteArrayOutputStream();
             Charset shiftJis = Charset.forName("Shift_JIS");
-            for (int i = 0; i < original.length(); i++) {
-                char c = original.charAt(i);
+            for (int i = 0; i < value.length(); i++) {
+                char c = value.charAt(i);
                 if (c <= 0x00FF) {
-                    bytes.write((byte) c);
+                    bytes.write((byte)c);
                 } else if (c >= 0xFF61 && c <= 0xFF9F) {
                     byte[] one = String.valueOf(c).getBytes(shiftJis);
-                    if (one.length != 1) return original;
+                    if (one.length != 1) return value;
                     bytes.write(one[0]);
                 } else {
-                    return original;
+                    return value;
                 }
             }
             String restored = new String(bytes.toByteArray(), Charset.forName("MS949"));
-            if (restored.indexOf('\uFFFD') < 0 && hangulCount(restored) > hangulCount(original)) {
-                return restored;
-            }
+            if (restored.indexOf('\uFFFD') < 0 && hangulCount(restored) > hangulCount(value)) return restored;
         } catch (Exception ignored) { }
-        return original;
+        return value;
     }
 
     private int hangulCount(String value) {
-        if (value == null) return 0;
         int count = 0;
+        if (value == null) return count;
         for (int i = 0; i < value.length(); i++) {
             char c = value.charAt(i);
             if (c >= 0xAC00 && c <= 0xD7A3) count++;
@@ -387,25 +348,22 @@ public class CustomQrCaptureActivity extends ComponentActivity {
     private boolean isPlausibleHanil(String text) {
         if (text == null || !text.startsWith("CB0010@")) return false;
         String[] fields = text.split("@", -1);
-        boolean hasDate = false;
-        boolean hasWeight = false;
-        boolean hasYeongwol = false;
-        boolean hasVehicle = false;
-
+        boolean date = false, weight = false, yeongwol = false, vehicle = false;
         for (String field : fields) {
             String v = field == null ? "" : field.trim();
-            if (v.matches("\\d{8}")) hasDate = true;
-            if (v.contains("한일영월") || v.contains("한일시멘트") || v.contains("영월")) hasYeongwol = true;
-            if (v.matches(".*[가-힣]{1,3}\\d{2,3}[가-힣]\\d{4}.*")) hasVehicle = true;
+            if (v.matches("\\d{8}")) date = true;
+            if (v.contains("한일영월") || v.contains("한일시멘트") || v.contains("영월")) yeongwol = true;
+            if (v.matches(".*[가-힣]{1,3}\\d{2,3}[가-힣]\\d{4}.*")) vehicle = true;
             try {
                 double n = Double.parseDouble(v.replace(",", ""));
-                if (n >= 10.0 && n <= 80.0) hasWeight = true;
+                if (n >= 10 && n <= 80) weight = true;
             } catch (Exception ignored) { }
         }
-        return hasDate && hasWeight && hasYeongwol && hasVehicle;
+        return date && weight && yeongwol && vehicle;
     }
 
     private DecodedQr scanWithZBar(GrayFrame upright) {
+        // Existing raw-first sequence: protects already-working Hanil/Sampyo/other slips.
         DecodedQr result = scan(upright);
         if (result != null) return result;
 
@@ -421,14 +379,36 @@ public class CustomQrCaptureActivity extends ComponentActivity {
         result = scan(crop62);
         if (result != null) return result;
 
-        GrayFrame enhanced = stretchContrast(crop76);
-        result = scan(enhanced);
+        GrayFrame contrast76 = stretchContrast(crop76);
+        result = scan(contrast76);
+        if (result != null) return result;
+        result = scan(otsuThreshold(contrast76));
         if (result != null) return result;
 
-        result = scan(otsuThreshold(enhanced));
+        GrayFrame contrast62 = stretchContrast(crop62);
+        result = scan(scaleNearest(contrast62, 1.50f));
         if (result != null) return result;
 
-        return scan(scaleNearest(stretchContrast(crop62), 1.50f));
+        // Northpyeong high-density fallback. The supplied real slip decodes after
+        // a tight crop plus Otsu thresholding, so these expensive passes run last.
+        GrayFrame crop52 = centerCrop(upright, 0.52f);
+        result = scan(crop52);
+        if (result != null) return result;
+        GrayFrame contrast52 = stretchContrast(crop52);
+        result = scan(contrast52);
+        if (result != null) return result;
+        result = scan(otsuThreshold(contrast52));
+        if (result != null) return result;
+        result = scan(scaleNearest(otsuThreshold(contrast52), 2.00f));
+        if (result != null) return result;
+
+        GrayFrame crop44 = centerCrop(upright, 0.44f);
+        result = scan(crop44);
+        if (result != null) return result;
+        GrayFrame contrast44 = stretchContrast(crop44);
+        result = scan(otsuThreshold(contrast44));
+        if (result != null) return result;
+        return scan(scaleNearest(otsuThreshold(contrast44), 2.00f));
     }
 
     private DecodedQr scan(GrayFrame frame) {
@@ -439,18 +419,14 @@ public class CustomQrCaptureActivity extends ComponentActivity {
         SymbolSet symbols = zbarScanner.getResults();
         for (Symbol symbol : symbols) {
             String data = symbol.getData();
-            if (data == null || data.trim().isEmpty()) continue;
-            return new DecodedQr(data, extractZbarRawBytes(symbol));
+            if (data != null && !data.trim().isEmpty()) {
+                return new DecodedQr(data, extractZbarRawBytes(symbol));
+            }
         }
         return null;
     }
 
-    /**
-     * Some ZBar Android wrappers expose Symbol#getDataBytes(), while older forks
-     * expose only getData(). Reflection keeps this build compatible with both.
-     */
     private byte[] extractZbarRawBytes(Symbol symbol) {
-        if (symbol == null) return null;
         try {
             java.lang.reflect.Method method = symbol.getClass().getMethod("getDataBytes");
             Object value = method.invoke(symbol);
@@ -458,9 +434,7 @@ public class CustomQrCaptureActivity extends ComponentActivity {
                 byte[] bytes = (byte[]) value;
                 return bytes.length == 0 ? null : bytes;
             }
-        } catch (Throwable ignored) {
-            // Hanil never trusts these bytes directly; non-Hanil keeps compatibility.
-        }
+        } catch (Throwable ignored) { }
         return null;
     }
 
@@ -478,7 +452,6 @@ public class CustomQrCaptureActivity extends ComponentActivity {
             buffer.get(out, 0, out.length);
             return new GrayFrame(out, width, height);
         }
-
         byte[] row = new byte[rowStride];
         for (int y = 0; y < height; y++) {
             int rowPosition = base + y * rowStride;
@@ -503,22 +476,14 @@ public class CustomQrCaptureActivity extends ComponentActivity {
             return new GrayFrame(out, src.width, src.height);
         }
         if (d == 90 || d == 270) {
-            int nw = src.height;
-            int nh = src.width;
+            int nw = src.height, nh = src.width;
             byte[] out = new byte[src.data.length];
             for (int y = 0; y < src.height; y++) {
                 for (int x = 0; x < src.width; x++) {
-                    int sourceIndex = y * src.width + x;
-                    int nx;
-                    int ny;
-                    if (d == 90) {
-                        nx = src.height - 1 - y;
-                        ny = x;
-                    } else {
-                        nx = y;
-                        ny = src.width - 1 - x;
-                    }
-                    out[ny * nw + nx] = src.data[sourceIndex];
+                    int nx, ny;
+                    if (d == 90) { nx = src.height - 1 - y; ny = x; }
+                    else { nx = y; ny = src.width - 1 - x; }
+                    out[ny * nw + nx] = src.data[y * src.width + x];
                 }
             }
             return new GrayFrame(out, nw, nh);
@@ -544,8 +509,7 @@ public class CustomQrCaptureActivity extends ComponentActivity {
         int total = src.data.length;
         int lowTarget = Math.max(1, total / 50);
         int highTarget = Math.max(1, total - lowTarget);
-        int cumulative = 0;
-        int low = 0;
+        int cumulative = 0, low = 0;
         for (; low < 255; low++) {
             cumulative += histogram[low];
             if (cumulative >= lowTarget) break;
@@ -554,20 +518,17 @@ public class CustomQrCaptureActivity extends ComponentActivity {
         int high = 255;
         for (int i = 0; i < 256; i++) {
             cumulative += histogram[i];
-            if (cumulative >= highTarget) {
-                high = i;
-                break;
-            }
+            if (cumulative >= highTarget) { high = i; break; }
         }
         if (high - low < 24) return src;
-        int range = high - low;
         byte[] out = new byte[src.data.length];
+        int range = high - low;
         for (int i = 0; i < src.data.length; i++) {
             int v = src.data[i] & 0xFF;
             int mapped = (v - low) * 255 / range;
             if (mapped < 0) mapped = 0;
             else if (mapped > 255) mapped = 255;
-            out[i] = (byte) mapped;
+            out[i] = (byte)mapped;
         }
         return new GrayFrame(out, src.width, src.height);
     }
@@ -580,8 +541,7 @@ public class CustomQrCaptureActivity extends ComponentActivity {
             histogram[v]++;
             sum += v;
         }
-        int total = src.data.length;
-        int backgroundWeight = 0;
+        int total = src.data.length, backgroundWeight = 0;
         long backgroundSum = 0;
         double bestVariance = -1;
         int threshold = 127;
@@ -590,19 +550,16 @@ public class CustomQrCaptureActivity extends ComponentActivity {
             if (backgroundWeight == 0) continue;
             int foregroundWeight = total - backgroundWeight;
             if (foregroundWeight == 0) break;
-            backgroundSum += (long) t * histogram[t];
-            double backgroundMean = (double) backgroundSum / backgroundWeight;
-            double foregroundMean = (double) (sum - backgroundSum) / foregroundWeight;
-            double diff = backgroundMean - foregroundMean;
-            double variance = (double) backgroundWeight * foregroundWeight * diff * diff;
-            if (variance > bestVariance) {
-                bestVariance = variance;
-                threshold = t;
-            }
+            backgroundSum += (long)t * histogram[t];
+            double bm = (double)backgroundSum / backgroundWeight;
+            double fm = (double)(sum - backgroundSum) / foregroundWeight;
+            double diff = bm - fm;
+            double variance = (double)backgroundWeight * foregroundWeight * diff * diff;
+            if (variance > bestVariance) { bestVariance = variance; threshold = t; }
         }
         byte[] out = new byte[src.data.length];
         for (int i = 0; i < src.data.length; i++) {
-            out[i] = (byte) (((src.data[i] & 0xFF) <= threshold) ? 0 : 255);
+            out[i] = (byte)(((src.data[i] & 0xFF) <= threshold) ? 0 : 255);
         }
         return new GrayFrame(out, src.width, src.height);
     }
@@ -612,12 +569,10 @@ public class CustomQrCaptureActivity extends ComponentActivity {
         int newHeight = Math.max(src.height, Math.round(src.height * scale));
         byte[] out = new byte[newWidth * newHeight];
         for (int y = 0; y < newHeight; y++) {
-            int sy = Math.min(src.height - 1, (int) (y / scale));
-            int sourceRow = sy * src.width;
-            int targetRow = y * newWidth;
+            int sy = Math.min(src.height - 1, (int)(y / scale));
             for (int x = 0; x < newWidth; x++) {
-                int sx = Math.min(src.width - 1, (int) (x / scale));
-                out[targetRow + x] = src.data[sourceRow + sx];
+                int sx = Math.min(src.width - 1, (int)(x / scale));
+                out[y * newWidth + x] = src.data[sy * src.width + sx];
             }
         }
         return new GrayFrame(out, newWidth, newHeight);
@@ -628,9 +583,7 @@ public class CustomQrCaptureActivity extends ComponentActivity {
         Intent data = new Intent(Intents.Scan.ACTION);
         data.putExtra(Intents.Scan.RESULT, result);
         data.putExtra(Intents.Scan.RESULT_FORMAT, "QR_CODE");
-        if (rawBytes != null && rawBytes.length > 0) {
-            data.putExtra(Intents.Scan.RESULT_BYTES, rawBytes);
-        }
+        if (rawBytes != null && rawBytes.length > 0) data.putExtra(Intents.Scan.RESULT_BYTES, rawBytes);
         setResult(Activity.RESULT_OK, data);
         finish();
     }
@@ -650,22 +603,13 @@ public class CustomQrCaptureActivity extends ComponentActivity {
     private static final class DecodedQr {
         final String text;
         final byte[] rawBytes;
-
-        DecodedQr(String text, byte[] rawBytes) {
-            this.text = text;
-            this.rawBytes = rawBytes;
-        }
+        DecodedQr(String text, byte[] rawBytes) { this.text = text; this.rawBytes = rawBytes; }
     }
 
     private static final class GrayFrame {
         final byte[] data;
         final int width;
         final int height;
-
-        GrayFrame(byte[] data, int width, int height) {
-            this.data = data;
-            this.width = width;
-            this.height = height;
-        }
+        GrayFrame(byte[] data, int width, int height) { this.data = data; this.width = width; this.height = height; }
     }
 }
