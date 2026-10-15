@@ -21,7 +21,6 @@ android {
         debug {
             applicationIdSuffix = ".hanilqr169"
             versionNameSuffix = "-easy-install"
-            resValue("string", "app_name", "운송일보 QR테스트 1.6.9")
         }
         release {
             isMinifyEnabled = false
