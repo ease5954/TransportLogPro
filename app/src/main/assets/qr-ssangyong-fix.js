@@ -1,6 +1,6 @@
 // Cement-waybill compatibility layer.
 // Keeps Sampyo/base parsing untouched and adds structural fallbacks for
-// Hanil Yeongwol, Ssangyong Northpyeong, and Halla Cement port waybills.
+// Hanil Yeongwol, Ssangyong Northpyeong, Halla Cement, and SP Nature waybills.
 (function(root){
   'use strict';
 
@@ -101,6 +101,39 @@
     };
   }
 
+  const SP_NATURE_QR={
+    plant:{U02:'(주)에스피네이처 천안슬래그공장'},
+    customer:{'2140620000':'미래해운(주)'},
+    destination:{'2140620000':'미래해운(주)_동해부(강릉)_천안SP'},
+    item:{'1A3010102':'고로슬래그 미분말'},
+    vehicle:{'6610':'충북99바6610'}
+  };
+
+  function spNature(text){
+    const raw=clean(text);
+    const p=raw.split('|').map(v=>String(v||'').trim());
+    if(p[0]!=='U02'||p.length<9)return null;
+    const date=formatDate(p[1]);
+    const kg=Number(String(p[8]||'').replace(/,/g,''));
+    if(!date||!Number.isFinite(kg)||kg<=0)return {valid:false,reason:'에스피네이처 운송장의 납품량을 확인할 수 없습니다.',raw};
+    const suffix=p[3]||'';
+    let vehicle='';
+    if(typeof root.resolveQrVehicle==='function')vehicle=root.resolveQrVehicle(suffix)||'';
+    if(!vehicle)vehicle=SP_NATURE_QR.vehicle[suffix]||suffix;
+    const customer=SP_NATURE_QR.customer[p[4]]||'';
+    const unloading=SP_NATURE_QR.destination[p[4]]||'';
+    const item=SP_NATURE_QR.item[p[6]]||'고로슬래그 미분말';
+    return {
+      valid:true,type:'spnature-pipe',company:'에스피네이처',date,
+      time:/^\d{6}$/.test(p[2]||'')?String(p[2]).slice(0,4):String(p[2]||'').slice(0,4),
+      vehicle,customer,customerCode:p[4]||'',unloading,
+      item,itemCode:p[6]||'',slip:p[7]||'',weight:kg/1000,round:p[9]||'',
+      loading:SP_NATURE_QR.plant[p[0]]||'(주)에스피네이처 천안슬래그공장',
+      aggregate:SP_NATURE_QR.plant[p[0]]||'(주)에스피네이처 천안슬래그공장',
+      price:0,carrier:'',customerComplete:Boolean(customer),destinationComplete:Boolean(unloading),raw
+    };
+  }
+
   function labelValue(text,labels){
     const escaped=labels.map(x=>x.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')).join('|');
     const re=new RegExp('(?:'+escaped+')\\s*[:=]?\\s*([^@|;\\n\\r]+)','i');
@@ -130,7 +163,7 @@
     const raw=clean(text);
     if(!raw)return null;
     const repaired=raw.split(/(@|\||;|\n|\r)/).map(part=>/^(?:@|\||;|\n|\r)$/.test(part)?part:decodeField(part)).join('');
-    if(/CB0010@/i.test(repaired)||/\bBK\b/i.test(repaired))return null;
+    if(/CB0010@/i.test(repaired)||/\bBK\b/i.test(repaired)||repaired.startsWith('U02|'))return null;
 
     const vehicle=(repaired.match(/[가-힣]{1,2}\d{2,3}[가-힣]\d{4}/)||[])[0]||'';
     const dateMatch=(repaired.match(/20\d{2}[-./]?\d{2}[-./]?\d{2}/)||[])[0]||'';
@@ -162,6 +195,7 @@
 
   root.parseTransportQR=function(text){
     const raw=clean(text);
+    const sp=spNature(raw);if(sp)return sp;
     if(raw.startsWith('CB0010@')){
       const h=hanil(raw);
       if(h)return h;
@@ -173,9 +207,10 @@
   };
 
   root.chooseQrItem=function(q,c){
-    if(!q||!['hanil-at','ssangyong-at','halla-port'].includes(q.type))return baseChoose(q,c);
+    if(!q||!['hanil-at','ssangyong-at','halla-port','spnature-pipe'].includes(q.type))return baseChoose(q,c);
     if(q.type==='hanil-at'||q.type==='halla-port')q.item='포틀랜드시멘트(1종)';
     if(q.type==='ssangyong-at'&&!q.item)q.item='3종 BK';
+    if(q.type==='spnature-pipe'&&!q.item)q.item='고로슬래그 미분말';
 
     const rates=c&&c.rates||[];
     const normalize=typeof root.normalizeQrName==='function'?root.normalizeQrName:(v=>String(v||''));
@@ -193,7 +228,7 @@
       root.save('clients',root.clients||clients);
       root.renderRates(c);
       root.chooseRate(q.item,0);
-      const name=q.type==='hanil-at'?'한일 영월':q.type==='ssangyong-at'?'쌍용 북평':'한라 항만';
+      const name=q.type==='hanil-at'?'한일 영월':q.type==='ssangyong-at'?'쌍용 북평':q.type==='halla-port'?'한라 항만':'에스피네이처';
       root.showQrStatus(name+' QR 인식 완료 · '+q.item+' 등록 · 단가만 확인해주세요');
       return;
     }
@@ -204,4 +239,5 @@
   root.__hanilStructuralQR=hanil;
   root.__ssangyongStructuralQR=ssangyong;
   root.__hallaStructuralQR=halla;
+  root.__spNatureStructuralQR=spNature;
 })(window);
