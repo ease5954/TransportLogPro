@@ -206,8 +206,53 @@
     return ssangyong(text)||hanil(text)||halla(text)||result||{valid:false,reason:'운송정보 항목이 없는 QR입니다.',raw:String(text||'')};
   };
 
+  // Always show the currently selected/decoded product on the registration form.
+  function ensureProductDisplay(){
+    if(document.getElementById('regItemDisplay'))return document.getElementById('regItemDisplay');
+    const client=document.getElementById('regClient');
+    const choices=document.getElementById('rateChoices');
+    if(!client||!choices||!client.parentNode)return null;
+    const wrap=document.createElement('div');
+    wrap.id='regItemDisplayWrap';
+    wrap.style.marginTop='12px';
+    const label=document.createElement('label');
+    label.className='label';
+    label.textContent='제품명(품목)';
+    const input=document.createElement('input');
+    input.id='regItemDisplay';
+    input.className='input';
+    input.readOnly=true;
+    input.placeholder='QR 스캔 또는 물품을 선택하세요';
+    wrap.appendChild(label);
+    wrap.appendChild(input);
+    client.parentNode.insertBefore(wrap,choices);
+    return input;
+  }
+  function syncProductDisplay(item){
+    const input=ensureProductDisplay();
+    if(input)input.value=String(item==null?'':item);
+  }
+
+  const baseChooseRate=root.chooseRate;
+  root.chooseRate=function(item,price){
+    const result=baseChooseRate(item,price);
+    syncProductDisplay(item||root.regItem||'');
+    return result;
+  };
+
+  const baseApplyClient=root.applyClient;
+  root.applyClient=function(){
+    root.regItem='';
+    syncProductDisplay('');
+    return baseApplyClient();
+  };
+
   root.chooseQrItem=function(q,c){
-    if(!q||!['hanil-at','ssangyong-at','halla-port','spnature-pipe'].includes(q.type))return baseChoose(q,c);
+    if(!q||!['hanil-at','ssangyong-at','halla-port','spnature-pipe'].includes(q.type)){
+      const result=baseChoose(q,c);
+      syncProductDisplay(root.regItem||q&&q.item||'');
+      return result;
+    }
     if(q.type==='hanil-at'||q.type==='halla-port')q.item='포틀랜드시멘트(1종)';
     if(q.type==='ssangyong-at'&&!q.item)q.item='3종 BK';
     if(q.type==='spnature-pipe'&&!q.item)q.item='고로슬래그 미분말';
@@ -221,19 +266,40 @@
       const same=rates.filter(r=>root.cementGrade(r.item)===grade);
       if(grade&&same.length===1)match=same[0];
     }
-    if(match){root.chooseRate(match.item,match.price);return;}
+    if(match){root.chooseRate(match.item,match.price);syncProductDisplay(match.item);return;}
     if(c){
       c.rates=c.rates||[];
       if(!c.rates.some(r=>normalize(r.item)===key))c.rates.push({item:q.item,price:0});
       root.save('clients',root.clients||clients);
       root.renderRates(c);
       root.chooseRate(q.item,0);
+      syncProductDisplay(q.item);
       const name=q.type==='hanil-at'?'한일 영월':q.type==='ssangyong-at'?'쌍용 북평':q.type==='halla-port'?'한라 항만':'에스피네이처';
       root.showQrStatus(name+' QR 인식 완료 · '+q.item+' 등록 · 단가만 확인해주세요');
       return;
     }
-    return baseChoose(q,c);
+    const result=baseChoose(q,c);
+    root.regItem=q.item||root.regItem||'';
+    syncProductDisplay(root.regItem);
+    return result;
   };
+
+  const baseApplyQR=root.applyQR;
+  root.applyQR=function(text){
+    const result=baseApplyQR(text);
+    syncProductDisplay(root.regItem||'');
+    return result;
+  };
+
+  const baseSaveTransport=root.saveTransport;
+  root.saveTransport=function(){
+    const result=baseSaveTransport();
+    if(!root.regItem)syncProductDisplay('');
+    return result;
+  };
+
+  ensureProductDisplay();
+  syncProductDisplay(root.regItem||'');
 
   root.__decodeHanilMojibakeField=decodeField;
   root.__hanilStructuralQR=hanil;
