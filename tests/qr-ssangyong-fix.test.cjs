@@ -11,6 +11,7 @@ assert.ok(start>=0&&end>start,'base QR parser exists');
 
 const scope={Date,Number,String,TextDecoder,Uint8Array,logs:[],$:()=>({value:''})};
 scope.window=scope;
+scope.document={getElementById:()=>null};
 vm.createContext(scope);
 vm.runInContext(app.slice(start,end),scope);
 // Minimal stubs needed by the compatibility layer; only structural decoding is exercised here.
