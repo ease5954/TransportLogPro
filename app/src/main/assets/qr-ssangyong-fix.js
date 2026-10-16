@@ -180,7 +180,7 @@
     const carrier=labelValue(repaired,['운송업체','운송사명','운송사'])||(/미래해운/.test(repaired)?'미래해운(주)':'');
     const unloading=labelValue(repaired,['하차지','도착지','납품처','현장명']);
     const driver=labelValue(repaired,['기사성명','기사명','운전기사','기사']);
-    const timeMatch=(repaired.match(/(?:^|[^\d])([01]\d|2[0-3])[:]?([0-5]\d)(?!\d)/)||[]);
+    const timeMatch=(repaired.match(/(?:^|[^\d])([01]\d|2[0-3]):([0-5]\d)(?!\d)/)||[]);
     const time=timeMatch.length>=3?timeMatch[1]+timeMatch[2]:'';
 
     return {
