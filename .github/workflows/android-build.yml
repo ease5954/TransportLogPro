@@ -39,12 +39,14 @@ jobs:
         run: |
           node --check app/src/main/assets/app.js
           node --check app/src/main/assets/qr-ssangyong-fix.js
+          node --check app/src/main/assets/qr-sampyo-ui-fix.js
           node tests/qr-waybill.test.cjs
           node tests/qr-ssangyong-fix.test.cjs
           node tests/qr-hanil-final.test.cjs
           node tests/qr-halla-port.test.cjs
           node tests/qr-spnature.test.cjs
           node tests/qr-sampyo-samcheok-current.test.cjs
+          node tests/qr-sampyo-ui-fix.test.cjs
 
       - name: Build debug APK
         run: gradle :app:assembleDebug
@@ -73,9 +75,9 @@ jobs:
           from zipfile import ZipFile, ZIP_DEFLATED
           apk = Path("downloads/TransportLogPro-HANIL-HD.apk")
           message = (
-              "운송일보 PRO QR 테스트 앱 (1.7.8)\n"
+              "운송일보 PRO QR 테스트 앱 (1.7.9)\n"
               "1. 한일 영월, 쌍용 북평/동해, 삼표, 한라 항만, 에스피네이처 QR을 지원합니다.\n"
-              "2. 삼표 삼척 현재 운송장(미래해운 묵호공항 / 저발열시멘트 / 이진상운) 실물 조건을 검증합니다.\n"
+              "2. 삼표 삼척 현재 운송장의 거래처/품목/하차지/양회사/운송사를 등록 화면까지 강제 확인합니다.\n"
               "3. 기존에 이미 매핑된 삼표 운송장은 그대로 유지합니다.\n"
               "4. 기존 앱은 삭제하지 마세요. 이 앱은 별도 테스트 앱입니다.\n"
           )
