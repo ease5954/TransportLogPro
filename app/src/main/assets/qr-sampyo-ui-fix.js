@@ -93,4 +93,49 @@
     try{if(typeof root.chooseRate==='function')root.chooseRate(r.item,Number(r.price||0));else if(typeof chooseRate==='function')chooseRate(r.item,Number(r.price||0));}catch(e){root.regItem=r.item;}
     root.regItem=r.item;const display=el('regItemDisplay');if(display)display.value=r.item;return result;
   };
+
+  // ---- Quick transport save reliability / 1.8.1 ----
+  function selectedItem(){
+    let item=String(root.regItem||'').trim();
+    const display=el('regItemDisplay');
+    if(!item&&display)item=String(display.value||'').trim();
+    try{
+      if(!item&&root.document&&typeof root.document.querySelector==='function'){
+        const active=root.document.querySelector('.choice.active');
+        if(active){
+          const encoded=String(active.dataset&&active.dataset.item||'');
+          item=encoded?decodeURIComponent(encoded):String(active.textContent||'').trim();
+        }
+      }
+    }catch(e){}
+    return item;
+  }
+
+  const previousSaveTransport=root.saveTransport;
+  if(typeof previousSaveTransport==='function'){
+    root.saveTransport=function(){
+      const item=selectedItem();
+      if(item)root.regItem=item;
+      try{return previousSaveTransport();}
+      catch(err){try{console.error('saveTransport failed',err);}catch(e){}safeToast('운송일보 저장 중 오류가 발생했습니다. 다시 눌러주세요.');return false;}
+    };
+  }
+
+  function addQuickSaveButton(){
+    try{
+      if(!root.document||typeof root.document.querySelector!=='function'||el('quickTransportSave'))return;
+      const calc=root.document.querySelector('#register .calc');
+      if(!calc||!calc.parentNode)return;
+      const btn=root.document.createElement('button');
+      btn.id='quickTransportSave';
+      btn.type='button';
+      btn.className='btn primary';
+      btn.style.marginTop='12px';
+      btn.style.minHeight='52px';
+      btn.textContent='✓ 바로 운송일보 저장';
+      btn.addEventListener('click',function(){if(typeof root.saveTransport==='function')root.saveTransport();});
+      calc.insertAdjacentElement('afterend',btn);
+    }catch(e){}
+  }
+  addQuickSaveButton();
 })(window);
