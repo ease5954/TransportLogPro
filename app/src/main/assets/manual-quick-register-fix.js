@@ -1,4 +1,5 @@
 // Manual quick-registration reliability patch for Android select dialogs.
+// v1.8.3: supports direct client entry when the client is not in the list.
 (function(root){
   'use strict';
   function el(id){return root.document&&root.document.getElementById?root.document.getElementById(id):null;}
@@ -7,16 +8,79 @@
   function setValue(id,value){const e=el(id);if(e)e.value=String(value==null?'':value);}
   function setProduct(item){root.regItem=String(item||'');const display=el('regItemDisplay');if(display)display.value=root.regItem;}
   function currentClient(){const s=el('regClient');return s?(clients||[]).find(c=>String(c&&c.id)===String(s.value||''))||null:null;}
+  function selectedItem(){
+    let item=String(root.regItem||'').trim();
+    const display=el('regItemDisplay');if(!item&&display)item=String(display.value||'').trim();
+    try{if(!item&&root.document&&typeof root.document.querySelector==='function'){const active=root.document.querySelector('.choice.active');if(active){const encoded=String(active.dataset&&active.dataset.item||'');item=encoded?decodeURIComponent(encoded):String(active.textContent||'').trim();}}}catch(e){}
+    return item;
+  }
   function routeFromRate(c,r){return{loading:String(r&&r.loading||c&&c.loading||c&&c.name||''),unloading:String(r&&r.unloading||c&&c.unloading||''),aggregate:String(r&&r.aggregate||c&&c.aggregate||r&&r.loading||c&&c.loading||c&&c.name||''),transport:String(r&&r.transport||c&&c.transport||'')};}
   function applyRate(c,r){if(!c||!r)return false;const route=routeFromRate(c,r);setProduct(r.item||'');setValue('regPrice',Number(r.price||0));setValue('regLoading',route.loading);setValue('regUnloading',route.unloading);setValue('regAggregate',route.aggregate);setValue('regTransport',route.transport);try{root.document.querySelectorAll('.choice').forEach(x=>{let item='';try{item=decodeURIComponent(x.dataset&&x.dataset.item||'');}catch(e){}x.classList.toggle('active',item===r.item);});}catch(e){}try{if(typeof root.calcFreight==='function')root.calcFreight();else if(typeof calcFreight==='function')calcFreight();}catch(e){}return true;}
   function renderClientRates(c){try{if(typeof root.renderRates==='function')root.renderRates(c);else if(typeof renderRates==='function')renderRates(c);}catch(e){const box=el('rateChoices');if(box)box.innerHTML='';}}
-  function hydrateSelectedClient(){const c=currentClient(),box=el('rateChoices');if(!c){if(box)box.innerHTML='';setProduct('');setValue('regPrice','');setValue('regLoading','');setValue('regUnloading','');setValue('regAggregate','');setValue('regTransport','');try{if(typeof root.calcFreight==='function')root.calcFreight();}catch(e){}return false;}c.rates=Array.isArray(c.rates)?c.rates:[];setValue('regLoading',c.loading||c.name||'');setValue('regUnloading',c.unloading||'');setValue('regAggregate',c.aggregate||c.loading||c.name||'');setValue('regTransport',c.transport||'');setProduct('');setValue('regPrice','');renderClientRates(c);if(c.rates.length===1)applyRate(c,c.rates[0]);try{if(typeof root.calcFreight==='function')root.calcFreight();}catch(e){}return true;}
+  function hydrateSelectedClient(){
+    const c=currentClient(),box=el('rateChoices');
+    if(!c){if(box)box.innerHTML='';setProduct('');setValue('regPrice','');setValue('regLoading','');setValue('regUnloading','');setValue('regAggregate','');setValue('regTransport','');try{if(typeof root.calcFreight==='function')root.calcFreight();}catch(e){}return false;}
+    c.rates=Array.isArray(c.rates)?c.rates:[];
+    const manual=el('regClientManual');if(manual)manual.value='';
+    setValue('regLoading',c.loading||c.name||'');setValue('regUnloading',c.unloading||'');setValue('regAggregate',c.aggregate||c.loading||c.name||'');setValue('regTransport',c.transport||'');setProduct('');setValue('regPrice','');renderClientRates(c);if(c.rates.length===1)applyRate(c,c.rates[0]);try{if(typeof root.calcFreight==='function')root.calcFreight();}catch(e){}return true;
+  }
   function migrateKnownRoute(){let changed=false;for(const c of(clients||[])){c.rates=Array.isArray(c.rates)?c.rates:[];for(const r of c.rates){if(norm(c.name)==='미래해운주'&&norm(r.item)==='저발열시멘트'){if(!r.loading){r.loading='삼표시멘트 삼척공장';changed=true;}if(!r.unloading){r.unloading='미래해운 묵호공항(상차도, 벌크)';changed=true;}if(!r.aggregate){r.aggregate='삼표시멘트 삼척공장';changed=true;}if(!r.transport){r.transport='이진상운';changed=true;}}}}if(changed)saveClients();}
   migrateKnownRoute();
+
+  function addDirectClientInput(){
+    const select=el('regClient');if(!select||el('regClientManual')||!root.document||typeof root.document.createElement!=='function')return;
+    const label=root.document.createElement('label');label.id='regClientManualLabel';label.className='label';label.textContent='거래처 직접 입력';label.style.marginTop='12px';
+    const input=root.document.createElement('input');input.id='regClientManual';input.className='input';input.type='text';input.autocomplete='off';input.placeholder='목록에 없으면 거래처명을 직접 입력하세요';
+    select.insertAdjacentElement('afterend',label);label.insertAdjacentElement('afterend',input);
+    const onManual=function(){
+      const name=String(input.value||'').trim();if(!name)return;
+      const match=(clients||[]).find(c=>norm(c&&c.name)===norm(name));
+      if(match){select.value=String(match.id);hydrateSelectedClient();input.value=name;return;}
+      select.value='';const box=el('rateChoices');if(box)box.innerHTML='';setProduct('');setValue('regPrice','');setValue('regLoading','');setValue('regUnloading','');setValue('regAggregate','');setValue('regTransport','');try{if(typeof root.calcFreight==='function')root.calcFreight();}catch(e){}
+    };
+    input.addEventListener('change',onManual);input.addEventListener('blur',onManual);
+  }
+
+  function directClientName(){const i=el('regClientManual');return String(i&&i.value||'').trim();}
+  function ensureDirectClientForSave(){
+    let c=currentClient();if(c)return c;
+    const name=directClientName();if(!name)return null;
+    c=(clients||[]).find(x=>norm(x&&x.name)===norm(name));
+    const loading=String(el('regLoading')&&el('regLoading').value||'').trim();
+    const unloading=String(el('regUnloading')&&el('regUnloading').value||'').trim();
+    const aggregate=String(el('regAggregate')&&el('regAggregate').value||'').trim();
+    const transport=String(el('regTransport')&&el('regTransport').value||'').trim();
+    const item=selectedItem();const price=Number(String(el('regPrice')&&el('regPrice').value||0).replace(/,/g,''))||0;
+    if(!c){c={id:Date.now(),name,loading:loading||name,unloading,aggregate:aggregate||loading||name,transport,rates:[]};clients.push(c);}
+    c.rates=Array.isArray(c.rates)?c.rates:[];
+    if(loading)c.loading=loading;if(unloading)c.unloading=unloading;if(aggregate)c.aggregate=aggregate;if(transport)c.transport=transport;
+    if(item){let r=c.rates.find(x=>norm(x&&x.item)===norm(item));if(!r){r={item,price};c.rates.push(r);}else{r.item=item;r.price=price;}r.loading=loading||r.loading||c.loading||c.name;r.unloading=unloading||r.unloading||'';r.aggregate=aggregate||r.aggregate||loading||c.loading||c.name;r.transport=transport||r.transport||c.transport||'';}
+    saveClients();
+    try{if(typeof root.fillClients==='function')root.fillClients();else if(typeof fillClients==='function')fillClients();}catch(e){}
+    const select=el('regClient');if(select)select.value=String(c.id);
+    return c;
+  }
+
   root.applyClient=hydrateSelectedClient;
   const select=el('regClient');if(select){const run=()=>root.setTimeout?root.setTimeout(hydrateSelectedClient,0):hydrateSelectedClient();select.addEventListener('change',run);select.addEventListener('input',run);select.addEventListener('blur',run);}
   const choices=el('rateChoices');if(choices){choices.addEventListener('click',function(){const run=function(){const c=currentClient();if(!c)return;const item=String(root.regItem||'');const rate=(c.rates||[]).find(r=>norm(r&&r.item)===norm(item));if(rate)applyRate(c,rate);};if(root.setTimeout)root.setTimeout(run,0);else run();});}
   const previousChooseQrItem=root.chooseQrItem;if(typeof previousChooseQrItem==='function'){root.chooseQrItem=function(q,c){const result=previousChooseQrItem(q,c);if(q&&q.item&&c){c.rates=Array.isArray(c.rates)?c.rates:[];const rate=c.rates.find(r=>norm(r&&r.item)===norm(q.item));if(rate){if(q.loading)rate.loading=q.loading;if(q.unloading&&q.destinationComplete!==false)rate.unloading=q.unloading;if(q.aggregate)rate.aggregate=q.aggregate;else if(q.loading&&!rate.aggregate)rate.aggregate=q.loading;if(q.carrier)rate.transport=q.carrier;saveClients();}}return result;};}
+
+  addDirectClientInput();
+
+  const previousSaveTransport=root.saveTransport;
+  if(typeof previousSaveTransport==='function'){
+    root.saveTransport=function(){
+      const item=selectedItem();if(item)root.regItem=item;
+      if(!currentClient()){
+        const c=ensureDirectClientForSave();
+        if(!c){try{if(typeof root.toast==='function')root.toast('거래처를 선택하거나 직접 입력해주세요');else if(typeof toast==='function')toast('거래처를 선택하거나 직접 입력해주세요');}catch(e){}return false;}
+      }
+      return previousSaveTransport();
+    };
+  }
+
   root.__hydrateManualQuickClient=hydrateSelectedClient;
   root.__applyManualQuickRate=applyRate;
+  root.__ensureDirectClientForSave=ensureDirectClientForSave;
 })(window);
