@@ -1,6 +1,6 @@
 // Cement-waybill compatibility layer.
-// Keeps Sampyo/base parsing untouched and adds structural fallbacks for
-// Hanil Yeongwol, Ssangyong Northpyeong, Halla Cement, and SP Nature waybills.
+// Keeps Sampyo/base parsing intact and adds structural fallbacks/enrichment for
+// Hanil Yeongwol, Ssangyong Northpyeong, Halla Cement, SP Nature and Sampyo Samcheok.
 (function(root){
   'use strict';
 
@@ -134,6 +134,27 @@
     };
   }
 
+  function enrichSampyo(result){
+    if(!result||!result.valid||result.type!=='sampyo-pipe')return result;
+    const customerCode=String(result.customerCode||'');
+    const isMirae=customerCode==='1150850000'||result.customer==='미래해운(주)';
+    if(!isMirae)return result;
+
+    // Preserve any explicit mapping already known by the base parser. The current
+    // Samcheok/Mukho route is used only when a Sampyo code has not yet been mapped.
+    if(!result.customer)result.customer='미래해운(주)';
+    if(!result.unloading){
+      result.unloading='미래해운 묵호공항(상차도, 벌크)';
+      result.destinationComplete=true;
+    }
+    if(!result.item)result.item='저발열시멘트';
+    result.loading=result.loading||'삼표시멘트 삼척공장';
+    result.aggregate='삼표시멘트 삼척공장';
+    result.carrier='이진상운';
+    result.customerComplete=true;
+    return result;
+  }
+
   function labelValue(text,labels){
     const escaped=labels.map(x=>x.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')).join('|');
     const re=new RegExp('(?:'+escaped+')\\s*[:=]?\\s*([^@|;\\n\\r]+)','i');
@@ -202,11 +223,10 @@
     }
     let result=null;
     try{result=baseParse(text);}catch(e){}
-    if(result&&result.valid)return result;
+    if(result&&result.valid)return enrichSampyo(result);
     return ssangyong(text)||hanil(text)||halla(text)||result||{valid:false,reason:'운송정보 항목이 없는 QR입니다.',raw:String(text||'')};
   };
 
-  // Always show the currently selected/decoded product on the registration form.
   function ensureProductDisplay(){
     if(document.getElementById('regItemDisplay'))return document.getElementById('regItemDisplay');
     const client=document.getElementById('regClient');
@@ -306,4 +326,5 @@
   root.__ssangyongStructuralQR=ssangyong;
   root.__hallaStructuralQR=halla;
   root.__spNatureStructuralQR=spNature;
+  root.__enrichSampyo=enrichSampyo;
 })(window);
