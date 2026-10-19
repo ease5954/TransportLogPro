@@ -1,4 +1,4 @@
-// Quick registration polish for 1.8.6.
+// Quick registration polish for 1.8.7.
 // Keeps existing QR, client/product, save and edit behavior unchanged.
 (function(root){
   'use strict';
@@ -24,6 +24,27 @@
   }
   const manual=el('regClientManual');if(manual&&typeof manual.addEventListener==='function')['change','blur'].forEach(t=>manual.addEventListener(t,()=>{if(root.setTimeout)root.setTimeout(syncDirectClientLoading,0);else syncDirectClientLoading();}));
   const newName=el('newClientName'),newLoading=el('newClientLoading');if(newName&&newLoading&&typeof newName.addEventListener==='function')newName.addEventListener('input',()=>{if(!(newLoading.dataset&&newLoading.dataset.manual))newLoading.value=String(newName.value||'').trim();});
+
+  // 1.8.7: transport-edit-fix restores the historical row after applyClient().
+  // If an older row has an empty loading/aggregate field, do not overwrite the
+  // registered client's route with blank values. Restore the client fallback.
+  const previousEditTransport=root.editTransport;
+  if(typeof previousEditTransport==='function'){
+    root.editTransport=function(id){
+      const ok=previousEditTransport(id);
+      if(!ok)return ok;
+      const loading=el('regLoading'),aggregate=el('regAggregate'),select=el('regClient'),manualInput=el('regClientManual');
+      let c=null;
+      try{c=(clients||[]).find(x=>String(x&&x.id)===String(select&&select.value||''))||null;}catch(e){}
+      const manualName=String(manualInput&&manualInput.value||'').trim();
+      const fallback=String(c&&c.loading||c&&c.name||manualName||'').trim();
+      const aggregateFallback=String(c&&c.aggregate||c&&c.loading||c&&c.name||manualName||'').trim();
+      if(loading&&!String(loading.value||'').trim()&&fallback)loading.value=fallback;
+      if(aggregate&&!String(aggregate.value||'').trim()&&aggregateFallback)aggregate.value=aggregateFallback;
+      return ok;
+    };
+  }
+
   root.__reliableCalcFreight=calc;
   root.__syncDirectClientLoading=syncDirectClientLoading;
   calc();
