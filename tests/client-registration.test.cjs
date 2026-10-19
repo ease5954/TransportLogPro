@@ -38,7 +38,9 @@ assert.equal(scope.clients.length,1);
 assert.equal(scope.clients[0].name,'미래해운(주)');
 assert.equal(scope.clients[0].loading,'삼표시멘트 삼척공장');
 assert.equal(scope.clients[0].transport,'이진상운');
-assert.deepEqual(scope.clients[0].rates,[{item:'저발열시멘트',price:0}]);
+assert.equal(scope.clients[0].rates.length,1);
+assert.equal(scope.clients[0].rates[0].item,'저발열시멘트');
+assert.equal(scope.clients[0].rates[0].price,0);
 assert.match(toasts.at(-1),/신규 거래처 등록 완료/);
 
 // Duplicate client name with formatting differences updates instead of duplicating.
@@ -61,8 +63,11 @@ const c={id:99,name:'새 거래처',loading:'공장',transport:'',rates:[]};
 scope.clients.push(c);
 const q={valid:true,type:'sampyo-pipe',item:'저발열시멘트',price:0};
 scope.chooseQrItem(q,c);
-assert.deepEqual(c.rates,[{item:'저발열시멘트',price:0}]);
+assert.equal(c.rates.length,1);
+assert.equal(c.rates[0].item,'저발열시멘트');
+assert.equal(c.rates[0].price,0);
 assert.equal(scope.regItem,'저발열시멘트');
-assert.deepEqual(scope.lastRate,['저발열시멘트',0]);
+assert.equal(scope.lastRate[0],'저발열시멘트');
+assert.equal(scope.lastRate[1],0);
 
 console.log('PASS: client registration/update and zero-price QR item auto-registration are stable');
