@@ -51,6 +51,7 @@ jobs:
           node tests/client-registration.test.cjs
           node tests/quick-transport-save.test.cjs
           node tests/manual-quick-register.test.cjs
+          node tests/direct-client-entry.test.cjs
 
       - name: Build debug APK
         run: gradle :app:assembleDebug
@@ -79,12 +80,13 @@ jobs:
           from zipfile import ZipFile, ZIP_DEFLATED
           apk = Path("downloads/TransportLogPro-HANIL-HD.apk")
           message = (
-              "운송일보 PRO QR 테스트 앱 (1.8.2)\n"
-              "1. 빠른운송등록에서 Android 거래처 선택창으로 거래처를 고르면 저장된 물품/단가가 즉시 다시 표시됩니다.\n"
-              "2. 품목별 상차지/하차지/양회사/운송사를 저장해 같은 거래처의 여러 노선을 구분합니다.\n"
-              "3. 미래해운(주) 저발열시멘트 노선은 삼표 삼척공장 → 묵호공항, 이진상운으로 자동 복원됩니다.\n"
-              "4. QR 스캔 등록과 0원 단가 저장 기능은 그대로 유지합니다.\n"
-              "5. 기존 앱은 삭제하지 마세요. 이 앱은 별도 테스트 앱입니다.\n"
+              "운송일보 PRO QR 테스트 앱 (1.8.3)\n"
+              "1. 빠른운송등록에서 등록된 거래처는 기존처럼 선택할 수 있습니다.\n"
+              "2. 목록에 없는 거래처는 바로 아래 '거래처 직접 입력' 칸에 입력할 수 있습니다.\n"
+              "3. 직접 입력한 거래처로 저장하면 거래처 목록에도 자동 등록됩니다.\n"
+              "4. 입력한 품목/상차지/하차지/양회사/운송사도 함께 기억합니다.\n"
+              "5. 기존 QR 스캔, 거래처 선택, 0원 단가 저장 기능은 그대로 유지합니다.\n"
+              "6. 기존 앱은 삭제하지 마세요. 이 앱은 별도 테스트 앱입니다.\n"
           )
           with ZipFile("downloads/TransportLogPro-HANIL-HD-ALZip.zip", "w", ZIP_DEFLATED) as z:
               z.write(apk, apk.name)
