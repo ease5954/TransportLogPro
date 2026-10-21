@@ -1,8 +1,32 @@
-// Quick registration polish for 1.8.9.
+// Quick registration polish for 1.9.0.
 // Keeps existing QR, client/product, save and edit behavior unchanged.
 (function(root){
   'use strict';
   function el(id){return root.document&&root.document.getElementById?root.document.getElementById(id):null;}
+
+  function ensureHistoryQuickRegisterButton(){
+    const history=el('history');
+    if(!history||!root.document||typeof root.document.createElement!=='function')return false;
+    if(el('historyQuickRegister'))return true;
+    const tabs=typeof history.querySelector==='function'?history.querySelector('.tabs'):null;
+    if(!tabs||!tabs.parentNode)return false;
+    const button=root.document.createElement('button');
+    button.id='historyQuickRegister';
+    button.type='button';
+    button.className='btn primary';
+    button.style.margin='8px 0 4px';
+    button.textContent='＋ 바로 운송 등록';
+    button.setAttribute('aria-label','빠른 운송 등록 화면으로 이동');
+    button.addEventListener('click',function(){
+      try{
+        if(typeof root.go==='function')root.go('register');
+        else if(typeof go==='function')go('register');
+      }catch(e){}
+    });
+    tabs.parentNode.insertBefore(button,tabs);
+    return true;
+  }
+
   function normalizeDigits(v){return String(v==null?'':v).replace(/[０-９]/g,ch=>String(ch.charCodeAt(0)-0xFF10)).replace(/．/g,'.').replace(/，/g,',').replace(/−/g,'-').trim();}
   function num(v){const s=normalizeDigits(v).replace(/,/g,'').replace(/\s+/g,'').trim();const n=Number(s);return Number.isFinite(n)?n:0;}
   function calc(){const w=num(el('regWeight')&&el('regWeight').value);const p=num(el('regPrice')&&el('regPrice').value);const f=Math.round(w*p);const out=el('regFreight');if(out)out.textContent=f.toLocaleString('ko-KR')+'원';return f;}
@@ -87,5 +111,7 @@
   root.__reliableCalcFreight=calc;
   root.__syncDirectClientLoading=syncDirectClientLoading;
   root.__captureQuickSaveValues=captureSaveValues;
+  root.__ensureHistoryQuickRegisterButton=ensureHistoryQuickRegisterButton;
+  ensureHistoryQuickRegisterButton();
   calc();
 })(window);
