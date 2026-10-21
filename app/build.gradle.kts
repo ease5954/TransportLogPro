@@ -10,13 +10,13 @@ android {
         applicationId = "com.transportlog.proapp"
         minSdk = 24
         targetSdk = 36
-        versionCode = 43
-        versionName = "1.8.7"
+        versionCode = 44
+        versionName = "1.8.8"
     }
 
     buildTypes {
         debug {
-            applicationIdSuffix = ".edit185"
+            applicationIdSuffix = ".install188"
             versionNameSuffix = "-easy-install"
         }
         release {
