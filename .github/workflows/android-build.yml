@@ -8,6 +8,10 @@ on:
 permissions:
   contents: write
 
+concurrency:
+  group: android-build-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -86,12 +90,13 @@ jobs:
           from zipfile import ZipFile, ZIP_DEFLATED
           apk = Path("downloads/TransportLogPro-HANIL-HD.apk")
           message = (
-              "운송일보 PRO QR 테스트 앱 (1.9.1)\n"
-              "1. Android 뒤로가기를 누르면 등록/내역/정산 등 하위 화면에서 홈으로 이동합니다.\n"
-              "2. 홈에서는 뒤로가기를 한 번 누르면 종료 안내가 나오고, 2초 안에 한 번 더 누르면 종료됩니다.\n"
-              "3. 열린 메뉴/보험/앱정보/단가 팝업은 뒤로가기로 먼저 닫힙니다.\n"
-              "4. 1.9.0의 바로 운송 등록과 기존 QR/저장/수정 기능을 그대로 유지합니다.\n"
-              "5. 설치 충돌 방지를 위해 1.9.1은 별도 테스트 앱으로 설치됩니다.\n"
+              "운송일보 PRO QR 테스트 앱 (1.9.2)\n"
+              "1. 최신 Android의 Predictive Back을 끄고 앱의 뒤로가기 로직을 우선 사용합니다.\n"
+              "2. 등록/내역/정산 등 하위 화면에서 뒤로가기를 누르면 홈으로 이동합니다.\n"
+              "3. 홈에서는 뒤로가기를 한 번 누르면 종료 안내가 나오고, 2초 안에 한 번 더 누르면 종료됩니다.\n"
+              "4. 열린 메뉴/보험/앱정보/단가 팝업은 뒤로가기로 먼저 닫힙니다.\n"
+              "5. 동시에 여러 빌드가 예전 APK를 덮어쓰지 않도록 최신 빌드만 유지합니다.\n"
+              "6. 설치 충돌 방지를 위해 1.9.2는 별도 테스트 앱으로 설치됩니다.\n"
           )
           with ZipFile("downloads/TransportLogPro-HANIL-HD-ALZip.zip", "w", ZIP_DEFLATED) as z:
               z.write(apk, apk.name)
