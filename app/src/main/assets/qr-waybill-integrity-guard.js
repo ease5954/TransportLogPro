@@ -159,7 +159,7 @@
           newLog.qrSlip=meta.slip||'';
           newLog.qrCompany=meta.company||'';
           try{if(typeof root.save==='function')root.save('logs',rows);else if(typeof save==='function')save('logs',rows);}catch(e){}
-          scan=null;
+          // Retain the last scanned waybill identity to block accidental double-taps.
         }
       }
       return result;
