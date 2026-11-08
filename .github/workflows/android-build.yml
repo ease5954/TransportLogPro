@@ -47,6 +47,8 @@ jobs:
           node --check app/src/main/assets/manual-quick-register-fix.js
           node --check app/src/main/assets/transport-edit-fix.js
           node --check app/src/main/assets/quick-register-calc-loading-fix.js
+          node --check app/src/main/assets/qr-waybill-integrity-guard.js
+          node tests/qr-duplicate-integrity.test.cjs
           node tests/qr-waybill.test.cjs
           node tests/qr-ssangyong-fix.test.cjs
           node tests/qr-hanil-final.test.cjs
@@ -90,7 +92,7 @@ jobs:
           from zipfile import ZipFile, ZIP_DEFLATED
           apk = Path("downloads/TransportLogPro-HANIL-HD.apk")
           message = (
-              "운송일보 PRO QR 테스트 앱 (1.9.2)\n"
+              "운송일보 PRO QR 테스트 앱 (1.9.6)\n"
               "1. 최신 Android의 Predictive Back을 끄고 앱의 뒤로가기 로직을 우선 사용합니다.\n"
               "2. 등록/내역/정산 등 하위 화면에서 뒤로가기를 누르면 홈으로 이동합니다.\n"
               "3. 홈에서는 뒤로가기를 한 번 누르면 종료 안내가 나오고, 2초 안에 한 번 더 누르면 종료됩니다.\n"
