@@ -2,24 +2,28 @@
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="108dp" android:height="108dp"
     android:viewportWidth="108" android:viewportHeight="108">
-    <!-- metallic cargo truck body, safely inside adaptive icon mask -->
-    <path android:fillColor="#183252" android:pathData="M19,50 L64,50 L64,74 L19,74 Z"/>
-    <path android:fillColor="#E9F3FA" android:pathData="M21,49 L61,49 Q64,49 64,52 L64,70 L21,70 Z"/>
-    <path android:fillColor="#A9C4D6" android:pathData="M23,52 L59,52 L59,61 L23,61 Z"/>
-    <path android:fillColor="#426985" android:pathData="M25,54 L57,54 L57,56 L25,56 Z"/>
-    <path android:fillColor="#D8E9F2" android:pathData="M64,55 L77,55 L87,65 L87,72 L64,72 Z"/>
-    <path android:fillColor="#FFFFFF" android:pathData="M66,56 L75,56 L84,65 L84,70 L66,70 Z"/>
-    <path android:fillColor="#153454" android:pathData="M69,58 L74,58 L80,64 L69,64 Z"/>
-    <path android:fillColor="#FDBB36" android:pathData="M79,67 L85,67 L85,70 L79,70 Z"/>
-    <path android:fillColor="#1E405D" android:pathData="M19,70 L87,70 L87,75 L19,75 Z"/>
-    <path android:fillColor="#FDBB36" android:pathData="M22,68 L60,68 L60,70 L22,70 Z"/>
-    <path android:fillColor="#10253A" android:pathData="M26,74 a7,7 0,1 0,14 0 a7,7 0,1 0,-14 0"/>
-    <path android:fillColor="#DCE7EE" android:pathData="M30,74 a3,3 0,1 0,6 0 a3,3 0,1 0,-6 0"/>
-    <path android:fillColor="#10253A" android:pathData="M68,74 a7,7 0,1 0,14 0 a7,7 0,1 0,-14 0"/>
-    <path android:fillColor="#DCE7EE" android:pathData="M72,74 a3,3 0,1 0,6 0 a3,3 0,1 0,-6 0"/>
-    <!-- QR scan brackets and cells -->
-    <path android:fillColor="#50DCED" android:pathData="M25,20 L35,20 L35,23 L28,23 L28,30 L25,30 Z M73,20 L83,20 L83,30 L80,30 L80,23 L73,23 Z M25,37 L28,37 L28,44 L35,44 L35,47 L25,47 Z M80,37 L83,37 L83,47 L73,47 L73,44 L80,44 Z"/>
-    <path android:fillColor="#FFFFFF" android:pathData="M36,26 L43,26 L43,33 L36,33 Z M47,26 L54,26 L54,33 L47,33 Z M58,26 L65,26 L65,33 L58,33 Z M36,36 L43,36 L43,43 L36,43 Z M49,36 L53,36 L53,40 L49,40 Z M58,36 L65,36 L65,43 L58,43 Z"/>
-    <path android:fillColor="#0D3554" android:pathData="M38,28 L41,28 L41,31 L38,31 Z M49,28 L52,28 L52,31 L49,31 Z M60,28 L63,28 L63,31 L60,31 Z M38,38 L41,38 L41,41 L38,41 Z M60,38 L63,38 L63,41 L60,41 Z"/>
-    <path android:fillColor="#FDBB36" android:pathData="M45,42 L55,42 L55,45 L45,45 Z"/>
+    <!-- Refined original: large readable QR above a clean freight truck. -->
+    <!-- QR blue scan-frame -->
+    <path android:fillColor="#41E1F2" android:pathData="M24,21 L34,21 L34,24 L27,24 L27,31 L24,31 Z M74,21 L84,21 L84,31 L81,31 L81,24 L74,24 Z M24,38 L27,38 L27,45 L34,45 L34,48 L24,48 Z M81,38 L84,38 L84,48 L74,48 L74,45 L81,45 Z"/>
+    <!-- QR white position blocks -->
+    <path android:fillColor="#FFFFFF" android:pathData="M34,25 L42,25 L42,33 L34,33 Z M46,25 L54,25 L54,33 L46,33 Z M58,25 L66,25 L66,33 L58,33 Z M34,36 L42,36 L42,44 L34,44 Z M58,36 L66,36 L66,44 L58,44 Z M46,36 L49,36 L49,39 L46,39 Z M52,39 L55,39 L55,42 L52,42 Z M47,43 L51,43 L51,46 L47,46 Z M69,32 L73,32 L73,36 L69,36 Z"/>
+    <path android:fillColor="#0A335E" android:pathData="M36,27 L40,27 L40,31 L36,31 Z M48,27 L52,27 L52,31 L48,31 Z M60,27 L64,27 L64,31 L60,31 Z M36,38 L40,38 L40,42 L36,42 Z M60,38 L64,38 L64,42 L60,42 Z"/>
+    <!-- low-key bright scan accent -->
+    <path android:fillColor="#FFCF4D" android:pathData="M42,35 L58,35 L58,37 L42,37 Z"/>
+    <!-- cargo compartment -->
+    <path android:fillColor="#294B6E" android:pathData="M18,54 L63,54 L63,72 L18,72 Z"/>
+    <path android:fillColor="#EEF8FF" android:pathData="M20,52 Q20,50 23,50 L60,50 Q63,50 63,53 L63,68 L20,68 Z"/>
+    <path android:fillColor="#B3CCDB" android:pathData="M23,54 L59,54 L59,64 L23,64 Z"/>
+    <path android:fillColor="#F8FCFF" android:pathData="M24,54 L57,54 L57,58 L24,58 Z"/>
+    <path android:fillColor="#F3BB39" android:pathData="M21,65 L62,65 L62,68 L21,68 Z"/>
+    <!-- cab / front glazing -->
+    <path android:fillColor="#F7FCFF" android:pathData="M64,56 L75,56 Q78,56 80,59 L88,67 L88,73 L64,73 Z"/>
+    <path android:fillColor="#264A70" android:pathData="M69,59 L76,59 L83,67 L69,67 Z"/>
+    <path android:fillColor="#6E9DBC" android:pathData="M71,60 L75,60 L79,64 L71,64 Z"/>
+    <path android:fillColor="#FFC84A" android:pathData="M84,69 L88,69 L88,72 L84,72 Z"/>
+    <path android:fillColor="#244665" android:pathData="M18,69 L88,69 L88,74 L18,74 Z"/>
+    <path android:fillColor="#D3E4EF" android:pathData="M63,68 L66,68 L66,73 L63,73 Z"/>
+    <!-- chunky wheels -->
+    <path android:fillColor="#0A2238" android:pathData="M25,74 a8,8 0,1 0,16 0 a8,8 0,1 0,-16 0 M68,74 a8,8 0,1 0,16 0 a8,8 0,1 0,-16 0"/>
+    <path android:fillColor="#DDEAF4" android:pathData="M30,74 a3,3 0,1 0,6 0 a3,3 0,1 0,-6 0 M73,74 a3,3 0,1 0,6 0 a3,3 0,1 0,-6 0"/>
 </vector>
