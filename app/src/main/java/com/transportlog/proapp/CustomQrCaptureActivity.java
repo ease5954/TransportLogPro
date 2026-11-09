@@ -181,7 +181,7 @@ public class CustomQrCaptureActivity extends ComponentActivity {
                 previewView.postDelayed(() -> focusAt(
                         previewView.getWidth() / 2f,
                         previewView.getHeight() / 2f
-                ), 450);
+                ), 300);
             } catch (Exception error) {
                 Toast.makeText(this, "QR 카메라 실행 실패: " + error.getMessage(), Toast.LENGTH_LONG).show();
                 setResult(Activity.RESULT_CANCELED);
@@ -210,7 +210,7 @@ public class CustomQrCaptureActivity extends ComponentActivity {
             return;
         }
         long now = System.currentTimeMillis();
-        if (now - lastAnalysisMs < 170) {
+        if (now - lastAnalysisMs < 130) {
             proxy.close();
             return;
         }
