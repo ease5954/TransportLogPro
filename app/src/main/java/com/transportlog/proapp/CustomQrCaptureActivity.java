@@ -66,6 +66,7 @@ public class CustomQrCaptureActivity extends ComponentActivity {
     private volatile boolean resultDelivered;
     private volatile boolean mlKitBusy;
     private volatile long lastAnalysisMs;
+    private long analyzedFrameCount;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -219,7 +220,10 @@ public class CustomQrCaptureActivity extends ComponentActivity {
         try {
             GrayFrame raw = copyLuma(proxy);
             GrayFrame upright = rotate(raw, proxy.getImageInfo().getRotationDegrees());
-            DecodedQr zbar = scanWithZBar(upright);
+            // Fast path is tried on every frame; dense-code recovery is sampled periodically.
+            // This lets ML Kit inspect normal QR frames without waiting for all 15+ fallback passes.
+            boolean deepScan = (++analyzedFrameCount % 3L == 0L);
+            DecodedQr zbar = scanWithZBar(upright, deepScan);
             if (zbar != null && zbar.text != null && !zbar.text.trim().isEmpty()) {
                 if (looksLikeHanil(zbar.text)) {
                     String repaired = repairHanilText(zbar.text);
@@ -362,7 +366,7 @@ public class CustomQrCaptureActivity extends ComponentActivity {
         return date && weight && yeongwol && vehicle;
     }
 
-    private DecodedQr scanWithZBar(GrayFrame upright) {
+    private DecodedQr scanWithZBar(GrayFrame upright, boolean deepScan) {
         // Existing raw-first sequence: protects already-working Hanil/Sampyo/other slips.
         DecodedQr result = scan(upright);
         if (result != null) return result;
@@ -378,6 +382,10 @@ public class CustomQrCaptureActivity extends ComponentActivity {
         GrayFrame crop62 = centerCrop(upright, 0.62f);
         result = scan(crop62);
         if (result != null) return result;
+
+        // Light frames go immediately to ML Kit. Every third frame still runs
+        // all legacy Northpyeong recovery steps for faint/high-density QR.
+        if (!deepScan) return null;
 
         GrayFrame contrast76 = stretchContrast(crop76);
         result = scan(contrast76);
