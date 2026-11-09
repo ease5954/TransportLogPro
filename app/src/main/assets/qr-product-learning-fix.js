@@ -13,14 +13,15 @@
  function saveMap(map){try{root.localStorage.setItem(KEY,JSON.stringify(map));return true;}catch(e){return false;}}
  function rateFor(c,item){if(!c||!Array.isArray(c.rates))return null;
    const key=norm(item);
-   const found=c.rates.find(r=>norm(r.item)===key&&Number(r.price)>0);
-   if(found)return found;
+   // Two display names can represent the same low-heat product. Prefer the
+   // existing short master label only when their saved prices agree.
    if(key==='저발열시멘트'||key==='저발열'){
      const same=c.rates.filter(r=>['저발열','저발열시멘트'].includes(norm(r.item))&&Number(r.price)>0);
      const prices=[...new Set(same.map(r=>Number(r.price)))];
      if(prices.length===1)return same.find(r=>norm(r.item)==='저발열')||same[0];
+     if(prices.length>1)return null; // conflicting rates require human review
    }
-   return null;
+   return c.rates.find(r=>norm(r.item)===key&&Number(r.price)>0)||null;
  }
  function codeKey(c,code){return norm(c&&c.name)+'|'+String(code||'').trim();}
  function exactCode(q){return String(q&&q.itemCode||'').trim();}
