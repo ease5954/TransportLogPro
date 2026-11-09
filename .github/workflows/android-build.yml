@@ -48,6 +48,8 @@ jobs:
           node --check app/src/main/assets/transport-edit-fix.js
           node --check app/src/main/assets/quick-register-calc-loading-fix.js
           node --check app/src/main/assets/qr-waybill-integrity-guard.js
+          node --check app/src/main/assets/qr-sampyo-item-identity-fix.js
+          node tests/qr-sampyo-item-identity.test.cjs
           node tests/qr-duplicate-integrity.test.cjs
           node tests/qr-waybill.test.cjs
           node tests/qr-ssangyong-fix.test.cjs
