@@ -12,7 +12,19 @@
  function norm(v){return String(v||'').replace(/[^0-9a-zA-Z가-힣]/g,'').toLowerCase();}
  function getClients(){try{return Array.isArray(clients)?clients:Array.isArray(root.clients)?root.clients:[];}catch(e){return Array.isArray(root.clients)?root.clients:[];}}
  function selectedClient(){const s=el('regClient');return getClients().find(c=>String(c.id)===String(s&&s.value||''))||null;}
- function getRate(c,name){return c&&Array.isArray(c.rates)?c.rates.find(r=>norm(r.item)===norm(name)):null;}
+ function getRate(c,name){
+  if(!c||!Array.isArray(c.rates))return null;
+  const key=norm(name);
+  const exact=c.rates.find(r=>norm(r.item)===key);
+  if(exact)return exact;
+  // The user's master data calls the same product simply "저발열".
+  // Match ONLY this verified synonym, not other cement grades or generic substrings.
+  if(key==='저발열시멘트'||key==='저발열'){
+    const options=c.rates.filter(r=>['저발열','저발열시멘트'].includes(norm(r.item))&&Number(r.price)>0);
+    return options.length===1?options[0]:null;
+  }
+  return null;
+}
  function showWarning(v){const n=el('regQrNotice');if(n){n.style.display='block';n.textContent=String(n.textContent||'').split('\n⚠ 품명')[0]+'\n⚠ 품명: '+v;}}
  function verify(q){
   if(!q||!q.valid||q.type!=='sampyo-pipe')return q;
@@ -46,13 +58,17 @@
     if(display)display.value=root.regItem;
     const saved=getRate(c,root.regItem);
     if(saved&&Number(saved.price)>0){
+      // Keep the real master-data label, e.g. "저발열", and its saved 3,700원/톤.
       if(typeof root.chooseRate==='function')root.chooseRate(saved.item,Number(saved.price));
+      root.regItem=saved.item;
       if(display)display.value=saved.item;
+      if(price)price.value=String(Number(saved.price));
     }else if(price){
-      price.value=''; // Never borrow type-1 freight rate for unregistered low-heat material.
+      // Never reuse a different product's rate.
+      price.value='';
     }
     try{if(typeof root.calcFreight==='function')root.calcFreight();}catch(e){}
-    showWarning('운송장 확인 품목은 저발열시멘트입니다. 단가를 확인하세요.');
+    showWarning(saved&&Number(saved.price)>0?'저발열 품명과 등록 단가를 자동 적용했습니다.':'저발열 품명 확인 완료 · 거래처의 저발열 단가를 등록해주세요.');
   }else if(needsItemReview){
     root.regItem='';
     if(display)display.value='';
@@ -71,7 +87,7 @@
        showWarning('제품명 확인이 필요합니다.');
        return false;
      }
-     if(scanned.item==='저발열시멘트'&&norm(name)!==norm(scanned.item)){
+     if(scanned.item==='저발열시멘트'&&!['저발열시멘트','저발열'].includes(norm(name))){
        if(typeof root.toast==='function')root.toast('저발열시멘트 운송장입니다. 품목을 확인해주세요.');
        return false;
      }
