@@ -10,7 +10,7 @@ const elements={
  regPrice:{value:''},
  regQrNotice:{textContent:'✓ QR 인식',style:{}}
 };
-const cards=[{dataset:{item:encodeURIComponent('저발열')},classList:{active:false,add(){this.active=true;},remove(){this.active=false;},toggle(k,b){this[k]=b;}}},{dataset:{item:encodeURIComponent('고로슬래그 미분말')},classList:{active:false,add(){this.active=true;},remove(){this.active=false;},toggle(k,b){this[k]=b;}}}];
+const cards=[{dataset:{item:encodeURIComponent('저발열')},classList:{active:false,contains(name){return name==='choice';},add(){this.active=true;},remove(){this.active=false;},toggle(k,b){this[k]=b;}}},{dataset:{item:encodeURIComponent('고로슬래그 미분말')},classList:{active:false,contains(name){return name==='choice';},add(){this.active=true;},remove(){this.active=false;},toggle(k,b){this[k]=b;}}}];
 const handlers={};
 elements.rateChoices={addEventListener:(name,fn)=>{handlers[name]=fn;}};
 const clients=[{id:'c1',name:'미래해운(주)',rates:[{item:'저발열',price:3700},{item:'저발열시멘트',price:3700},{item:'고로슬래그 미분말',price:17600}]}];
