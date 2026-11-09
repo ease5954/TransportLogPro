@@ -38,8 +38,19 @@ assert.equal(app.parseTransportQR('QR').item,'','unknown Sampyo item codes must 
 app.applyQR('QR');
 assert.equal(app.regItem,'');
 assert.equal(elements.regPrice.value,'');
-assert.equal(app.saveTransport(),false,'unknown item not allowed to save with blank selection');
+assert.equal(app.saveTransport(),false,'multiple priced products must not be guessed from an unknown code');
 assert.equal(saves,1);
+// When the client has only one priced product, preserve that rate instead of clearing
+// the visible green product card and leaving freight stuck at 0.
+clients[0].rates=[{item:'저발열',price:3700}];
+elements.regItemDisplay.value='';
+elements.regPrice.value='';
+app.applyQR('QR');
+assert.equal(elements.regItemDisplay.value,'저발열');
+assert.equal(elements.regPrice.value,'3700');
+assert.equal(app.regItem,'저발열');
+assert.equal(app.saveTransport(),true);
+assert.equal(saves,2);
 q={...q,itemCode:'10000001',item:'1종시멘트벌크'};
 assert.equal(app.parseTransportQR('QR').item,'1종시멘트벌크','known type-1 item must be preserved absent evidence');
 console.log('PASS: low-heat waybill identity, unknown-item review, valid type-1 unaffected');
