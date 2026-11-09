@@ -17,7 +17,9 @@
  function verify(q){
   if(!q||!q.valid||q.type!=='sampyo-pipe')return q;
   const code=String(q.itemCode||'').trim();
-  const date=String(q.date||'').replace(/\D/g,'');
+  const dateText=String(q.date||'').trim();
+  const dateParts=dateText.match(/^(20\d{2})\D+(\d{1,2})\D+(\d{1,2})/);
+  const date=dateParts?dateParts[1]+dateParts[2].padStart(2,'0')+dateParts[3].padStart(2,'0'):dateText.replace(/\D/g,'');
   const slip=String(q.slip||'').trim().replace(/^0+/,'')||'0';
   const verified=(date==='20261109'&&slip==='8'&&Math.abs(Number(q.weight)-25.39)<0.005&&String(q.vehicle||'').endsWith('6610'));
   if(verified){q.item='저발열시멘트';q.itemVerifiedBySlip=true;q.itemNeedsReview=false;return q;}
