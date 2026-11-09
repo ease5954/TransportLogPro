@@ -70,11 +70,29 @@
     try{if(typeof root.calcFreight==='function')root.calcFreight();}catch(e){}
     showWarning(saved&&Number(saved.price)>0?'저발열 품명과 등록 단가를 자동 적용했습니다.':'저발열 품명 확인 완료 · 거래처의 저발열 단가를 등록해주세요.');
   }else if(needsItemReview){
-    root.regItem='';
-    if(display)display.value='';
-    if(price)price.value='';
-    try{if(typeof root.calcFreight==='function')root.calcFreight();}catch(e){}
-    showWarning('QR 품목 코드가 등록되지 않았습니다. 정확한 품명을 직접 입력하거나 등록 품목을 선택하세요.');
+    // A single registered, priced product for the selected client is unambiguous.
+    // Old builds chose that rate first, then this guard wrongly cleared its inputs.
+    const priced=c&&Array.isArray(c.rates)?c.rates.filter(r=>String(r.item||'').trim()&&Number(r.price)>0):[];
+    const candidates=priced.filter((r,i)=>priced.findIndex(x=>norm(x.item)===norm(r.item))===i);
+    if(candidates.length===1){
+      const saved=candidates[0];
+      root.regItem=String(saved.item);
+      if(display)display.value=root.regItem;
+      if(price)price.value=String(Number(saved.price));
+      if(typeof root.chooseRate==='function')root.chooseRate(saved.item,Number(saved.price));
+      // Existing rate cards remain the source of truth, not an invented QR product.
+      if(display)display.value=root.regItem;
+      if(price)price.value=String(Number(saved.price));
+      needsItemReview=false;
+      try{if(typeof root.calcFreight==='function')root.calcFreight();}catch(e){}
+      showWarning('QR 품목 코드가 미등록이지만 이 거래처의 등록 품목이 하나라 '+saved.item+' · '+Number(saved.price).toLocaleString('ko-KR')+'원/톤을 적용했습니다. 저장 전 확인하세요.');
+    }else{
+      root.regItem='';
+      if(display)display.value='';
+      if(price)price.value='';
+      try{if(typeof root.calcFreight==='function')root.calcFreight();}catch(e){}
+      showWarning('QR 품목 코드가 등록되지 않았습니다. 정확한 품명을 직접 입력하거나 등록 품목을 선택하세요.');
+    }
   }
   return result;
  };
