@@ -50,6 +50,8 @@ jobs:
           node --check app/src/main/assets/qr-waybill-integrity-guard.js
           node --check app/src/main/assets/qr-sampyo-item-identity-fix.js
           node tests/qr-sampyo-item-identity.test.cjs
+          node --check app/src/main/assets/qr-product-learning-fix.js
+          node tests/qr-product-learning.test.cjs
           node tests/qr-duplicate-integrity.test.cjs
           node tests/qr-waybill.test.cjs
           node tests/qr-ssangyong-fix.test.cjs
